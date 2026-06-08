@@ -21,7 +21,7 @@ const REFRESH_INTERVAL_MS = 5_000
 interface PlayerMarkerGroup {
   id: string
   players: Array<{
-    player: Player & { level?: number; ping?: number } // Assurons-nous que le type accepte level et ping
+    player: Player & { level?: number }
     x: number
     y: number
   }>
@@ -377,7 +377,6 @@ export function LiveMap() {
         </div>
       </div>
 
-      {/* Utilisation de minmax(0, 1fr) pour éviter que la carte ne pousse la sidebar sur les petits écrans */}
       <div className="grid flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <Card className="border-border/60 bg-card/85 p-4 text-foreground shadow-2xl shadow-black/20 backdrop-blur lg:h-fit">
           <div className="space-y-4">
@@ -473,7 +472,6 @@ export function LiveMap() {
                     key={point.key}
                     src="/palworld-map/fast_travel.webp"
                     alt="Fast Travel"
-                    // Le scale(1 / scale) compense le zoom de la carte pour que l'icône garde une taille raisonnable
                     className="absolute z-20 h-7 w-7 select-none object-contain drop-shadow-md"
                     style={{
                       ...point.position,
@@ -489,7 +487,6 @@ export function LiveMap() {
                     key={point.key}
                     src="/palworld-map/boss_tower.webp"
                     alt="Boss Tower"
-                    // Même logique d'anti-zoom ici
                     className="absolute z-20 h-8 w-8 select-none object-contain drop-shadow-lg"
                     style={{
                       ...point.position,
@@ -517,8 +514,9 @@ export function LiveMap() {
                             onMouseEnter={() => setHoveredGroupId(group.id)}
                             onMouseLeave={() => setHoveredGroupId((current) => (current === group.id ? null : current))}
                           >
+                            {/* L'indicateur sous l'icône : un carré (rounded-sm) rouge vif bien visible avec halo */}
                             <div
-                              className="pointer-events-none absolute left-0 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary/45 bg-primary/35 shadow-lg shadow-primary/40"
+                              className="pointer-events-none absolute left-0 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-red-500 bg-red-600/80 shadow-[0_0_8px_rgba(239,68,68,0.8)]"
                               style={{ transform: `translate(-50%, -50%) scale(${1 / scale})` }}
                             />
                             <img
@@ -535,14 +533,14 @@ export function LiveMap() {
                                 transformOrigin: 'center bottom',
                               }}
                             >
-                              {/* Nouveau design du HUD Joueur avec Niveau et Ping */}
+                              {/* HUD épuré : Le Ping a été supprimé, bordures et lueurs adaptées au thème rouge */}
                               <div
-                                className={`absolute left-0 top-0 flex flex-col items-center justify-center min-w-[90px] rounded-lg border px-2 py-1.5 shadow-2xl transition-all backdrop-blur-md ${
+                                className={`absolute left-0 top-0 flex flex-col items-center justify-center min-w-[85px] rounded-lg border px-2 py-1.5 shadow-2xl transition-all backdrop-blur-md ${
                                   isCluster
                                     ? isHovered
-                                      ? 'border-primary/60 bg-black/90'
+                                      ? 'border-red-500/60 bg-black/90 shadow-red-500/10'
                                       : 'border-border/50 bg-black/75'
-                                    : 'border-primary/50 bg-black/85'
+                                    : 'border-red-500/40 bg-black/85 shadow-red-500/5'
                                 }`}
                                 style={{
                                   transform: 'translate(-50%, calc(-100% - 16px))',
@@ -551,13 +549,8 @@ export function LiveMap() {
                                 <span className="whitespace-nowrap text-xs font-bold text-amber-400">
                                   {player.name}
                                 </span>
-                                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-medium text-gray-300">
-                                  <span>Niv. {player.level || '?'}</span>
-                                  <span className="h-1 w-1 rounded-full bg-gray-500"></span>
-                                  <span className="flex items-center gap-0.5">
-                                    <span className={`h-1.5 w-1.5 rounded-full ${player.ping && player.ping < 100 ? 'bg-green-500' : 'bg-red-500'}`} />
-                                    {player.ping || 0}ms
-                                  </span>
+                                <div className="mt-0.5 text-[10px] font-semibold text-gray-300">
+                                  Niv. {player.level || '?'}
                                 </div>
                               </div>
                             </div>
