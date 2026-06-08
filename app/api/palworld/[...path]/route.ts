@@ -54,9 +54,11 @@ function buildUpstreamBaseUrl(serverIp: string, serverPort: number) {
 
 // ---- C'EST ICI ----
 function getServerConfig() {
-  // On récupère directement depuis le fichier .env
-  const serverIp = process.env.PALWORLD_SERVER_IP ?? ''
-  const serverPortRaw = process.env.PALWORLD_REST_API_PORT ?? ''
+  // On récupère les nouvelles variables publiques pour l'IP et le port
+  const serverIp = process.env.NEXT_PUBLIC_PALWORLD_SERVER_IP ?? process.env.PALWORLD_SERVER_IP ?? ''
+  const serverPortRaw = process.env.NEXT_PUBLIC_PALWORLD_REST_API_PORT ?? process.env.PALWORLD_REST_API_PORT ?? ''
+  
+  // On garde la variable privée pour le mot de passe
   const adminPassword = process.env.PALWORLD_ADMIN_PASSWORD ?? ''
 
   const serverPort = parsePort(serverPortRaw.trim())
