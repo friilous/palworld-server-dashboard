@@ -21,7 +21,7 @@ const REFRESH_INTERVAL_MS = 5_000
 interface PlayerMarkerGroup {
   id: string
   players: Array<{
-    player: Player
+    player: Player & { level?: number; ping?: number } // Assurons-nous que le type accepte level et ping
     x: number
     y: number
   }>
@@ -93,7 +93,7 @@ function ControlRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-3">
-      <span className="text-sm text-foreground">{label}</span>
+      <span className="text-sm font-medium text-foreground">{label}</span>
       <Switch checked={checked} onCheckedChange={onCheckedChange} />
     </div>
   )
@@ -142,9 +142,7 @@ export function LiveMap() {
   )
 
   const refreshPlayers = useCallback(async () => {
-    if (!config) {
-      return
-    }
+    if (!config) return
 
     const response = await fetch(buildPalworldProxyPath('players'), {
       headers: {
@@ -156,7 +154,7 @@ export function LiveMap() {
 
     if (!response.ok) {
       const text = await response.text()
-      throw new Error(text || 'players failed')
+      throw new Error(text || 'Échec de récupération des joueurs')
     }
 
     const payload = await response.json()
@@ -165,7 +163,6 @@ export function LiveMap() {
 
   const refreshMap = useCallback(async () => {
     setIsRefreshing(true)
-
     try {
       await refreshPlayers()
     } finally {
@@ -175,21 +172,14 @@ export function LiveMap() {
 
   useEffect(() => {
     const updateVisibility = () => setIsPageVisible(!document.hidden)
-
     updateVisibility()
     document.addEventListener('visibilitychange', updateVisibility)
-
-    return () => {
-      document.removeEventListener('visibilitychange', updateVisibility)
-    }
+    return () => document.removeEventListener('visibilitychange', updateVisibility)
   }, [])
 
   useEffect(() => {
     const element = mapPlaneRef.current
-
-    if (!element) {
-      return
-    }
+    if (!element) return
 
     const updateSize = () => {
       setMapSize({
@@ -199,10 +189,8 @@ export function LiveMap() {
     }
 
     updateSize()
-
     const observer = new ResizeObserver(updateSize)
     observer.observe(element)
-
     return () => observer.disconnect()
   }, [])
 
@@ -227,10 +215,7 @@ export function LiveMap() {
     }, REFRESH_INTERVAL_MS)
 
     const countdownInterval = window.setInterval(() => {
-      if (!nextAutoRefreshAtRef.current) {
-        return
-      }
-
+      if (!nextAutoRefreshAtRef.current) return
       setRefreshCountdownMs(Math.max(0, nextAutoRefreshAtRef.current - Date.now()))
     }, 250)
 
@@ -241,17 +226,11 @@ export function LiveMap() {
   }, [config, isPageVisible, refreshMap])
 
   useEffect(() => {
-    if (!isDragging) {
-      return
-    }
+    if (!isDragging) return
 
     const handleMouseMove = (event: MouseEvent) => {
       const start = dragStartRef.current
-
-      if (!start) {
-        return
-      }
-
+      if (!start) return
       setPan({
         x: start.panX + (event.clientX - start.x),
         y: start.panY + (event.clientY - start.y),
@@ -274,10 +253,7 @@ export function LiveMap() {
 
   const handleMapMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     const planeRect = mapPlaneRef.current?.getBoundingClientRect()
-
-    if (!planeRect) {
-      return
-    }
+    if (!planeRect) return
 
     const leftRatio = clamp((event.clientX - planeRect.left) / planeRect.width, 0, 1)
     const topRatio = clamp((event.clientY - planeRect.top) / planeRect.height, 0, 1)
@@ -289,15 +265,11 @@ export function LiveMap() {
 
   const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault()
-
     setZoom((current) => clamp(current + (event.deltaY < 0 ? 1 : -1), MIN_ZOOM, MAX_ZOOM))
   }, [])
 
   const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0) {
-      return
-    }
-
+    if (event.button !== 0) return
     event.preventDefault()
     dragStartRef.current = {
       x: event.clientX,
@@ -309,9 +281,7 @@ export function LiveMap() {
   }, [pan.x, pan.y])
 
   const playerGroups = useMemo(() => {
-    if (mappablePlayers.length === 0) {
-      return [] as PlayerMarkerGroup[]
-    }
+    if (mappablePlayers.length === 0) return [] as PlayerMarkerGroup[]
 
     const shouldUngroup = zoom >= 6
     const thresholdPx = shouldUngroup ? 0 : (38 * (1 - zoom / 6)) / scale
@@ -323,9 +293,7 @@ export function LiveMap() {
     const groups: PlayerMarkerGroup[] = []
 
     for (let i = 0; i < positionedPlayers.length; i += 1) {
-      if (visited.has(i)) {
-        continue
-      }
+      if (visited.has(i)) continue
 
       const queue = [i]
       const memberIndexes: number[] = []
@@ -333,18 +301,13 @@ export function LiveMap() {
 
       while (queue.length > 0) {
         const currentIndex = queue.shift()
-
-        if (currentIndex === undefined) {
-          continue
-        }
+        if (currentIndex === undefined) continue
 
         memberIndexes.push(currentIndex)
         const current = positionedPlayers[currentIndex]
 
         for (let j = 0; j < positionedPlayers.length; j += 1) {
-          if (visited.has(j)) {
-            continue
-          }
+          if (visited.has(j)) continue
 
           const candidate = positionedPlayers[j]
           const distance = Math.hypot(candidate.x - current.x, candidate.y - current.y)
@@ -372,15 +335,9 @@ export function LiveMap() {
   }, [mapSize.height, mapSize.width, mappablePlayers, scale, zoom])
 
   const refreshLabel = useMemo(() => {
-    if (!config) {
-      return 'Refresh: --'
-    }
-
-    if (!isPageVisible) {
-      return 'Refresh: Paused'
-    }
-
-    return `Refresh: ${Math.max(0, Math.ceil(refreshCountdownMs / 1000))}s`
+    if (!config) return 'Actu: --'
+    if (!isPageVisible) return 'Actu: En pause'
+    return `Actu: ${Math.max(0, Math.ceil(refreshCountdownMs / 1000))}s`
   }, [config, isPageVisible, refreshCountdownMs])
 
   return (
@@ -388,14 +345,14 @@ export function LiveMap() {
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/60 bg-card/70 p-4 backdrop-blur">
         <div>
           <div className="flex items-center gap-2 text-lg font-semibold">
-            <span>Live Map V4</span>
+            <span>Carte du Maraudeur</span>
             <span className="relative inline-flex h-2.5 w-2.5">
               <span className="status-dot absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
               <span className="status-dot relative inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
             </span>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Direct image renderer with live player markers from the `players` API.
+            Vue satellite en temps réel avec position et statut des joueurs.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -406,7 +363,7 @@ export function LiveMap() {
             {connectionStatus}
           </Badge>
           <Badge variant="secondary" className="border border-border/60 bg-muted/40 text-foreground hover:bg-muted/50">
-            Players: {players.length}
+            Joueurs: {players.length}
           </Badge>
           <Button
             size="icon"
@@ -420,25 +377,26 @@ export function LiveMap() {
         </div>
       </div>
 
-      <div className="grid flex-1 grid-cols-1 gap-4 p-4 xl:grid-cols-[18rem_1fr]">
-        <Card className="border-border/60 bg-card/85 p-4 text-foreground shadow-2xl shadow-black/20 backdrop-blur xl:h-fit">
+      {/* Utilisation de minmax(0, 1fr) pour éviter que la carte ne pousse la sidebar sur les petits écrans */}
+      <div className="grid flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
+        <Card className="border-border/60 bg-card/85 p-4 text-foreground shadow-2xl shadow-black/20 backdrop-blur lg:h-fit">
           <div className="space-y-4">
             <div className="rounded-xl border border-border/60 bg-muted/35 p-3">
-              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Zoom</div>
+              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Niveau de Zoom</div>
               <div className="mt-1 text-2xl font-semibold">{zoom + 1}x</div>
               <div className="mt-1 text-xs text-muted-foreground">
-                {zoom >= 6 ? 'Players ungrouped' : 'Grouping relaxes as you zoom in'}
+                {zoom >= 6 ? 'Joueurs dissociés' : 'Le regroupement s\'estompe en zoomant'}
               </div>
             </div>
 
             <div className="space-y-3 rounded-xl border border-border/60 bg-muted/35 p-4">
-              <ControlRow label="Show fast travel" checked={showFastTravels} onCheckedChange={setShowFastTravels} />
-              <ControlRow label="Show boss towers" checked={showBossTowers} onCheckedChange={setShowBossTowers} />
-              <ControlRow label="Show players" checked={showPlayers} onCheckedChange={setShowPlayers} />
+              <ControlRow label="Points de téléportation" checked={showFastTravels} onCheckedChange={setShowFastTravels} />
+              <ControlRow label="Tours de Boss" checked={showBossTowers} onCheckedChange={setShowBossTowers} />
+              <ControlRow label="Afficher les joueurs" checked={showPlayers} onCheckedChange={setShowPlayers} />
             </div>
 
             <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/35 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">Cursor</span>
+              <span className="text-muted-foreground">Position GPS</span>
               <span className="font-mono text-foreground">
                 {mousePosition[0]}, {mousePosition[1]}
               </span>
@@ -492,7 +450,7 @@ export function LiveMap() {
             >
               <img
                 src={MAP_IMAGE_URL}
-                alt="Palworld world map"
+                alt="Carte du monde Palworld"
                 className="block h-full w-full select-none object-cover"
                 draggable={false}
                 onLoad={() => {
@@ -506,7 +464,7 @@ export function LiveMap() {
               />
 
               <div className="pointer-events-none absolute left-3 top-3 z-30 rounded-full border border-primary/45 bg-primary/15 px-3 py-1 text-xs font-semibold tracking-[0.2em] text-primary">
-                MAP V4
+                CARTE EN DIRECT
               </div>
 
               {showFastTravels &&
@@ -514,9 +472,13 @@ export function LiveMap() {
                   <img
                     key={point.key}
                     src="/palworld-map/fast_travel.webp"
-                    alt=""
-                    className="absolute z-20 h-7 w-7 -translate-x-1/2 -translate-y-1/2 select-none object-contain"
-                    style={point.position}
+                    alt="Fast Travel"
+                    // Le scale(1 / scale) compense le zoom de la carte pour que l'icône garde une taille raisonnable
+                    className="absolute z-20 h-7 w-7 select-none object-contain drop-shadow-md"
+                    style={{
+                      ...point.position,
+                      transform: `translate(-50%, -50%) scale(${1 / scale})`
+                    }}
                     draggable={false}
                   />
                 ))}
@@ -526,9 +488,13 @@ export function LiveMap() {
                   <img
                     key={point.key}
                     src="/palworld-map/boss_tower.webp"
-                    alt=""
-                    className="absolute z-20 h-7 w-7 -translate-x-1/2 -translate-y-1/2 select-none object-contain"
-                    style={point.position}
+                    alt="Boss Tower"
+                    // Même logique d'anti-zoom ici
+                    className="absolute z-20 h-8 w-8 select-none object-contain drop-shadow-lg"
+                    style={{
+                      ...point.position,
+                      transform: `translate(-50%, -50%) scale(${1 / scale})`
+                    }}
                     draggable={false}
                   />
                 ))}
@@ -558,7 +524,7 @@ export function LiveMap() {
                             <img
                               src="/palworld-map/player.webp"
                               alt=""
-                              className="absolute left-0 top-0 h-7 w-7 -translate-x-1/2 -translate-y-1/2 select-none object-contain drop-shadow-[0_6px_14px_rgba(15,23,42,0.7)]"
+                              className="absolute left-0 top-0 h-8 w-8 -translate-x-1/2 -translate-y-1/2 select-none object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]"
                               style={{ transform: `translate(-50%, -50%) scale(${1 / scale})` }}
                               draggable={false}
                             />
@@ -569,19 +535,30 @@ export function LiveMap() {
                                 transformOrigin: 'center bottom',
                               }}
                             >
+                              {/* Nouveau design du HUD Joueur avec Niveau et Ping */}
                               <div
-                                className={`absolute left-0 top-0 whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-semibold shadow-xl transition-all ${
+                                className={`absolute left-0 top-0 flex flex-col items-center justify-center min-w-[90px] rounded-lg border px-2 py-1.5 shadow-2xl transition-all backdrop-blur-md ${
                                   isCluster
                                     ? isHovered
-                                      ? 'border-primary/45 bg-card/95 text-foreground'
-                                      : 'border-border/70 bg-card/90 text-foreground/90'
-                                    : 'border-primary/40 bg-card/92 text-foreground'
+                                      ? 'border-primary/60 bg-black/90'
+                                      : 'border-border/50 bg-black/75'
+                                    : 'border-primary/50 bg-black/85'
                                 }`}
                                 style={{
-                                  transform: 'translate(-50%, calc(-100% - 12px))',
+                                  transform: 'translate(-50%, calc(-100% - 16px))',
                                 }}
                               >
-                                {player.name}
+                                <span className="whitespace-nowrap text-xs font-bold text-amber-400">
+                                  {player.name}
+                                </span>
+                                <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-medium text-gray-300">
+                                  <span>Niv. {player.level || '?'}</span>
+                                  <span className="h-1 w-1 rounded-full bg-gray-500"></span>
+                                  <span className="flex items-center gap-0.5">
+                                    <span className={`h-1.5 w-1.5 rounded-full ${player.ping && player.ping < 100 ? 'bg-green-500' : 'bg-red-500'}`} />
+                                    {player.ping || 0}ms
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -595,7 +572,7 @@ export function LiveMap() {
             {!mapImageLoaded && !mapImageError && (
               <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/65">
                 <div className="rounded-full border border-border/70 bg-card/85 px-4 py-2 text-sm font-medium text-foreground shadow-xl backdrop-blur">
-                  Loading map image...
+                  Chargement de la carte...
                 </div>
               </div>
             )}
@@ -603,9 +580,9 @@ export function LiveMap() {
             {mapImageError && (
               <div className="absolute inset-0 z-40 flex items-center justify-center bg-background/75 p-6">
                 <div className="max-w-md rounded-2xl border border-destructive/35 bg-card/90 p-5 text-center text-foreground shadow-2xl">
-                  <div className="text-lg font-semibold">Map image failed to load</div>
+                  <div className="text-lg font-semibold text-destructive">Échec de l'affichage</div>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    The app could not load <code className="font-mono text-destructive">{MAP_IMAGE_URL}</code>.
+                    Impossible de charger l'image <code className="font-mono text-destructive/80">{MAP_IMAGE_URL}</code>.
                   </p>
                 </div>
               </div>
