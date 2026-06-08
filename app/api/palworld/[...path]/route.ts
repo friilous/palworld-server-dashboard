@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { NextRequest, NextResponse } from 'next/server'
-import { PALWORLD_PROXY_HEADERS } from '@/lib/palworld'
+// Plus besoin d'importer PALWORLD_PROXY_HEADERS ici
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -52,20 +52,13 @@ function buildUpstreamBaseUrl(serverIp: string, serverPort: number) {
   }
 }
 
-function getServerConfig(request: NextRequest) {
-  const searchParams = request.nextUrl.searchParams
-  const serverIp =
-    request.headers.get(PALWORLD_PROXY_HEADERS.serverIp) ??
-    searchParams.get('serverIp') ??
-    ''
-  const serverPortRaw =
-    request.headers.get(PALWORLD_PROXY_HEADERS.serverPort) ??
-    searchParams.get('serverPort') ??
-    ''
-  const adminPassword =
-    request.headers.get(PALWORLD_PROXY_HEADERS.adminPassword) ??
-    searchParams.get('adminPassword') ??
-    ''
+// ---- C'EST ICI QUE TOUT CHANGE ----
+function getServerConfig() {
+  // On récupère directement depuis le fichier .env
+  const serverIp = process.env.PALWORLD_SERVER_IP ?? ''
+  const serverPortRaw = process.env.PALWORLD_REST_API_PORT ?? ''
+  const adminPassword = process.env.PALWORLD_ADMIN_PASSWORD ?? ''
+
   const serverPort = parsePort(serverPortRaw.trim())
 
   if (!serverIp.trim() || serverPort == null || !adminPassword) {
@@ -78,6 +71,7 @@ function getServerConfig(request: NextRequest) {
     adminPassword,
   } satisfies ProxyServerConfig
 }
+// -----------------------------------
 
 async function getUpstreamRequestBody(request: NextRequest) {
   const contentType = request.headers.get('content-type')
@@ -106,10 +100,11 @@ function parseProxyResponse(text: string) {
 }
 
 async function proxyPalworldRequest(request: NextRequest, { params }: RouteContext, method: 'GET' | 'POST') {
-  const serverConfig = getServerConfig(request)
+  // Plus besoin de passer "request" à getServerConfig
+  const serverConfig = getServerConfig()
 
   if (!serverConfig) {
-    return NextResponse.json({ error: 'Missing server configuration' }, { status: 400 })
+    return NextResponse.json({ error: 'Missing server configuration in .env file' }, { status: 400 })
   }
 
   const upstreamBaseUrl = buildUpstreamBaseUrl(serverConfig.serverIp, serverConfig.serverPort)
