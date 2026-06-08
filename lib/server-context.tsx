@@ -166,8 +166,19 @@ export function ServerProvider({ children }: { children: ReactNode }) {
   const [nextMetricsFetchAt, setNextMetricsFetchAt] = useState<number | null>(null)
 
   useEffect(() => {
-    const storedConfig = normalizeServerConfig(readStorageValue<StoredServerConfig | null>(STORAGE_KEYS.config, null))
-    const shouldRestoreActiveSession = isActiveSessionStored()
+    let storedConfig = normalizeServerConfig(readStorageValue<StoredServerConfig | null>(STORAGE_KEYS.config, null))
+    
+    // Tentative de récupération depuis les variables d'environnement
+    if (!storedConfig && process.env.NEXT_PUBLIC_PALWORLD_SERVER_IP) {
+      storedConfig = normalizeServerConfig({
+        serverIp: process.env.NEXT_PUBLIC_PALWORLD_SERVER_IP,
+        restApiPort: process.env.NEXT_PUBLIC_PALWORLD_REST_API_PORT || '8212',
+        gamePort: process.env.NEXT_PUBLIC_PALWORLD_GAME_PORT || '8211',
+        adminPassword: process.env.NEXT_PUBLIC_PALWORLD_ADMIN_PASSWORD || '',
+      })
+    }
+
+    const shouldRestoreActiveSession = isActiveSessionStored() || !!storedConfig
     const storedHistory = storedConfig
       ? readStorageValue<FpsSample[]>(getFpsHistoryStorageKey(storedConfig), [])
       : readStorageValue<FpsSample[]>(LEGACY_FPS_HISTORY_STORAGE_KEY, [])
