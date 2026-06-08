@@ -52,7 +52,7 @@ function buildUpstreamBaseUrl(serverIp: string, serverPort: number) {
   }
 }
 
-// ---- C'EST ICI QUE TOUT CHANGE ----
+// ---- C'EST ICI ----
 function getServerConfig() {
   // On récupère directement depuis le fichier .env
   const serverIp = process.env.PALWORLD_SERVER_IP ?? ''
