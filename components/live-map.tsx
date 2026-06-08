@@ -11,6 +11,9 @@ import { useServer } from '@/lib/server-context'
 import type { Player } from '@/lib/types'
 import points from '@/lib/map-points.json'
 
+// ⚠️ IMPORTANT : Assure-toi d'avoir ce fichier créé dans ton projet avec tes identifiants Supabase
+// import { supabase } from '@/lib/supabase' 
+
 const LANDSCAPE = [447900, 708920, -999940, -738920] as const
 const MAP_IMAGE_URL = '/palworld-map/full-map-z4.png'
 const MIN_ZOOM = 0
@@ -115,6 +118,10 @@ export function LiveMap() {
   const [isPageVisible, setIsPageVisible] = useState(true)
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
   const [mapSize, setMapSize] = useState({ width: MAP_SIZE_FALLBACK, height: MAP_SIZE_FALLBACK })
+  
+  // NOUVEAU : State pour stocker les timers des boss
+  const [bossTimers, setBossTimers] = useState<any[]>([])
+
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const mapPlaneRef = useRef<HTMLDivElement | null>(null)
   const nextAutoRefreshAtRef = useRef<number | null>(null)
@@ -169,6 +176,28 @@ export function LiveMap() {
       setIsRefreshing(false)
     }
   }, [refreshPlayers])
+
+
+  useEffect(() => {
+    // Si tu n'as pas encore importé supabase, commente ce bloc entier en attendant
+    // 1. Récupérer les timers au chargement de la page
+    const fetchInitialTimers = async () => {
+      const { data, error } = await supabase.from('boss_timers').select('*')
+      if (data) setBossTimers(data)
+    }
+    fetchInitialTimers()
+
+    // 2. Écouter les changements en direct
+    const channel = supabase
+      .channel('schema-db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'boss_timers' }, payload => {
+        // Au lieu de gérer la logique complexe, on recharge juste la liste
+        fetchInitialTimers() 
+      })
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [])
 
   useEffect(() => {
     const updateVisibility = () => setIsPageVisible(!document.hidden)
@@ -514,7 +543,6 @@ export function LiveMap() {
                             onMouseEnter={() => setHoveredGroupId(group.id)}
                             onMouseLeave={() => setHoveredGroupId((current) => (current === group.id ? null : current))}
                           >
-                            {/* L'indicateur sous l'icône : un carré (rounded-sm) rouge vif bien visible avec halo */}
                             <div
                               className="pointer-events-none absolute left-0 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-red-500 bg-red-600/80 shadow-[0_0_8px_rgba(239,68,68,0.8)]"
                               style={{ transform: `translate(-50%, -50%) scale(${1 / scale})` }}
@@ -533,7 +561,6 @@ export function LiveMap() {
                                 transformOrigin: 'center bottom',
                               }}
                             >
-                              {/* HUD épuré : Le Ping a été supprimé, bordures et lueurs adaptées au thème rouge */}
                               <div
                                 className={`absolute left-0 top-0 flex flex-col items-center justify-center min-w-[85px] rounded-lg border px-2 py-1.5 shadow-2xl transition-all backdrop-blur-md ${
                                   isCluster
