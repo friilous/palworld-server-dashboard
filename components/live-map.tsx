@@ -102,7 +102,7 @@ export function LiveMap() {
   const [bases, setBases] = useState<any[]>([])
   const [isAddingBase, setIsAddingBase] = useState(false)
   const [newBaseCoords, setNewBaseCoords] = useState<{ x: number, y: number } | null>(null)
-  const [formData, setFormData] = useState({ name: '', faction: '', type: 'principale', color: '#3b82f6' })
+  const [formData, setFormData] = useState({ name: '', faction: '', type: 'main', color: '#3b82f6' })
 
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const mapPlaneRef = useRef<HTMLDivElement | null>(null)
@@ -457,16 +457,16 @@ export function LiveMap() {
                       style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
                       title={`${base.player_name} (${base.base_type})`}
                     >
-                      {/* Icône Maison avec couleur dynamique */}
+                      {/* Icône seule, sans conteneur de fond */}
                       <div 
-                        className="relative flex items-center justify-center p-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 shadow-lg"
+                        className="drop-shadow-md"
                         style={{ color: base.color_hex || '#3b82f6' }}
                       >
-                        <HomeIcon size={20} strokeWidth={2.5} />
+                        <HomeIcon size={24} strokeWidth={2.5} />
                       </div>
                       
-                      {/* Nom affiché en dessous */}
-                      <span className="mt-1.5 whitespace-nowrap rounded bg-black/80 px-2 py-0.5 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur">
+                      {/* Nom affiché au survol avec une ombre pour la lisibilité */}
+                      <span className="mt-1 whitespace-nowrap rounded bg-black/80 px-2 py-0.5 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
                         {base.player_name}
                       </span>
                     </div>
@@ -568,8 +568,10 @@ export function LiveMap() {
                   value={formData.type}
                   onChange={e => setFormData({...formData, type: e.target.value})}
                 >
-                  <option value="principale">Base Principale (Carré)</option>
-                  <option value="secondaire">Base Secondaire / Minage (Rond)</option>
+                  <option value="main">Base Principale</option>
+                  <option value="sub_1">Base Secondaire 1</option>
+                  <option value="sub_2">Base Secondaire 2</option>
+                  <option value="sub_3">Base Secondaire 3</option>
                 </select>
               </div>
 
