@@ -234,9 +234,9 @@ export function LiveMap() {
   }, [])
 
   const handleMapClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    // Évite d'agir si c'est un clic droit (event.button === 2) ou si on déplace la carte
-    if (event.button !== 0) return 
-    if (!isAddingBase || isDragging) return
+    // Écoute UNIQUEMENT le clic droit (button 2)
+    if (event.button !== 2) return 
+    if (!isAddingBase) return
 
     const planeRect = mapPlaneRef.current?.getBoundingClientRect()
     if (!planeRect) return
@@ -248,7 +248,7 @@ export function LiveMap() {
 
     const [worldX, worldY] = fromMapPosition([mapX, mapY])
     setNewBaseCoords({ x: parseFloat(worldX), y: parseFloat(worldY) })
-  }, [isAddingBase, isDragging])
+  }, [isAddingBase])
 
   const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -256,7 +256,7 @@ export function LiveMap() {
   }, [])
 
   const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return
+    if (event.button !== 0) return // On ne drague qu'avec le clic gauche
     event.preventDefault()
     dragStartRef.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y }
     setIsDragging(true)
@@ -394,9 +394,9 @@ export function LiveMap() {
                   <MapPinIcon className="h-4 w-4" /> Signaler ma base
                 </Button>
               ) : (
-                <div className="rounded-lg border border-primary/40 bg-primary/10 p-3 text-center">
-                  <span className="text-xs text-primary font-medium block mb-2 animate-pulse">
-                    Faites un clic gauche sur la carte à l'emplacement exact !
+                <div className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-center">
+                  <span className="text-xs text-red-500 font-bold block mb-2 animate-pulse">
+                    Faites un clic droit sur la carte à l'emplacement exact !
                   </span>
                   <Button variant="outline" size="sm" className="w-full" onClick={() => { setIsAddingBase(false); setNewBaseCoords(null) }}>
                     Annuler l'action
@@ -416,6 +416,10 @@ export function LiveMap() {
               onMouseMove={handleMapMouseMove}
               onMouseDown={handleMouseDown}
               onMouseUp={handleMapClick}
+              onContextMenu={(e) => { 
+                // Empêche le menu contextuel du navigateur de s'ouvrir quand on place une base
+                if (isAddingBase) e.preventDefault() 
+              }}
               onWheel={handleWheel}
             >
               <div
@@ -511,7 +515,7 @@ export function LiveMap() {
 
       </div>
 
-      {/* MODAL : Formulaire d'ajout de base (Déplacé à la racine pour éviter les conflits de clic/focus avec la carte) */}
+      {/* MODAL : Formulaire d'ajout de base */}
       {newBaseCoords && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
           <Card className="w-full max-w-sm p-6 shadow-2xl border-primary/50 bg-card">
