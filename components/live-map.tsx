@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MinusIcon, PlusIcon, RefreshCwIcon, MapPinIcon } from 'lucide-react'
+import { MinusIcon, PlusIcon, RefreshCwIcon, MapPinIcon, HomeIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -11,6 +11,7 @@ import { useServer } from '@/lib/server-context'
 import type { Player } from '@/lib/types'
 import points from '@/lib/map-points.json'
 import { supabase } from '@/lib/supabase'
+
 
 // --- CONSTANTES ET UTILS ---
 const LANDSCAPE = [447900, 708920, -999940, -738920] as const
@@ -149,7 +150,17 @@ export function LiveMap() {
 
   const saveBase = async () => {
     if (!newBaseCoords || !formData.name) return
-    await supabase.from('player_bases').insert([{
+    
+    console.log("Tentative d'insertion avec :", {
+      player_name: formData.name,
+      guild_name: formData.faction,
+      base_type: formData.type,
+      location_x: newBaseCoords.x,
+      location_y: newBaseCoords.y,
+      color_hex: formData.color
+    });
+
+    const { data, error } = await supabase.from('player_bases').insert([{
       player_name: formData.name, 
       guild_name: formData.faction,
       base_type: formData.type, 
@@ -157,10 +168,17 @@ export function LiveMap() {
       location_y: newBaseCoords.y, 
       color_hex: formData.color
     }])
-    setIsAddingBase(false)
-    setNewBaseCoords(null)
-    setFormData({ name: '', faction: '', type: 'principale', color: '#3b82f6' })
-    fetchData()
+
+    if (error) {
+      console.error("Erreur détaillée lors de l'insertion Supabase :", error);
+      alert("Erreur lors de la sauvegarde : " + error.message);
+    } else {
+      console.log("Succès !");
+      setIsAddingBase(false)
+      setNewBaseCoords(null)
+      setFormData({ name: '', faction: '', type: 'principale', color: '#3b82f6' })
+      fetchData()
+    }
   }
 
   const refreshPlayers = useCallback(async () => {
@@ -434,17 +452,23 @@ export function LiveMap() {
                   const position = toScreenPercent([base.location_x, base.location_y])
                   return (
                     <div
-                      key={base.id || `${base.location_x}-${base.location_y}`}
-                      className="absolute z-20 flex flex-col items-center justify-center"
+                      key={base.id}
+                      className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group"
                       style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
                       title={`${base.player_name} (${base.base_type})`}
                     >
-                      <div className={`h-6 w-6 rounded-sm border-2 border-black/80 shadow-lg ${base.base_type === 'principale' ? 'rounded-md' : 'rounded-full'}`} style={{ backgroundColor: base.color_hex || '#3b82f6' }} />
-                      {zoom >= 4 && (
-                        <span className="mt-1 whitespace-nowrap rounded bg-black/75 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur">
-                          {base.player_name}
-                        </span>
-                      )}
+                      {/* Icône Maison avec couleur dynamique */}
+                      <div 
+                        className="relative flex items-center justify-center p-1.5 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 shadow-lg"
+                        style={{ color: base.color_hex || '#3b82f6' }}
+                      >
+                        <HomeIcon size={20} strokeWidth={2.5} />
+                      </div>
+                      
+                      {/* Nom affiché en dessous */}
+                      <span className="mt-1.5 whitespace-nowrap rounded bg-black/80 px-2 py-0.5 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur">
+                        {base.player_name}
+                      </span>
                     </div>
                   )
                 })}
