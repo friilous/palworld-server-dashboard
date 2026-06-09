@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MinusIcon, PlusIcon, RefreshCwIcon, X, MapPinIcon } from 'lucide-react'
+import { MinusIcon, PlusIcon, RefreshCwIcon, MapPinIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -101,7 +101,7 @@ export function LiveMap() {
   const [bases, setBases] = useState<any[]>([])
   const [isAddingBase, setIsAddingBase] = useState(false)
   const [newBaseCoords, setNewBaseCoords] = useState<{ x: number, y: number } | null>(null)
-  const [formData, setFormData] = useState({ name: '', faction: '', type: 'secondary', color: '#3b82f6' })
+  const [formData, setFormData] = useState({ name: '', faction: '', type: 'principale', color: '#3b82f6' })
 
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const mapPlaneRef = useRef<HTMLDivElement | null>(null)
@@ -159,8 +159,8 @@ export function LiveMap() {
     }])
     setIsAddingBase(false)
     setNewBaseCoords(null)
-    setFormData({ name: '', faction: '', type: 'secondary', color: '#3b82f6' })
-    fetchData() // Rafraîchir l'affichage
+    setFormData({ name: '', faction: '', type: 'principale', color: '#3b82f6' })
+    fetchData()
   }
 
   const refreshPlayers = useCallback(async () => {
@@ -234,7 +234,8 @@ export function LiveMap() {
   }, [])
 
   const handleMapClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    // Ne rien faire si on est juste en train de déplacer la carte ou si on n'est pas en mode ajout
+    // Évite d'agir si c'est un clic droit (event.button === 2) ou si on déplace la carte
+    if (event.button !== 0) return 
     if (!isAddingBase || isDragging) return
 
     const planeRect = mapPlaneRef.current?.getBoundingClientRect()
@@ -308,14 +309,13 @@ export function LiveMap() {
     return `Actu: ${Math.max(0, Math.ceil(refreshCountdownMs / 1000))}s`
   }, [config, isPageVisible, refreshCountdownMs])
 
-  // Changement du curseur selon le mode
   const getCursorStyle = () => {
     if (isAddingBase && !newBaseCoords) return 'cursor-crosshair'
     return isDragging ? 'cursor-grabbing' : 'cursor-grab'
   }
 
   return (
-    <div className="flex h-full w-full flex-col bg-background text-foreground">
+    <div className="flex h-full w-full flex-col bg-background text-foreground relative">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/60 bg-card/70 p-4 backdrop-blur">
         <div>
@@ -340,73 +340,76 @@ export function LiveMap() {
         </div>
       </div>
 
-      {/* Grid Layout Principal (3 colonnes sur grands écrans : xl:grid-cols-[20rem_minmax(0,1fr)_20rem]) */}
+      {/* Grid Layout Principal */}
       <div className="grid flex-1 grid-cols-1 gap-4 p-4 xl:grid-cols-[20rem_minmax(0,1fr)_20rem] lg:grid-cols-[20rem_minmax(0,1fr)]">
         
-        {/* COLONNE 1 : Filtres (Gauche) */}
-        <Card className="border-border/60 bg-card/85 p-4 text-foreground shadow-2xl shadow-black/20 backdrop-blur lg:h-fit">
-          <div className="space-y-4">
-            <div className="rounded-xl border border-border/60 bg-muted/35 p-3">
-              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Niveau de Zoom</div>
-              <div className="mt-1 text-2xl font-semibold">{zoom + 1}x</div>
-              <div className="mt-1 text-xs text-muted-foreground">
-                {zoom >= 6 ? 'Joueurs dissociés' : 'Le regroupement s\'estompe en zoomant'}
+        {/* COLONNE 1 : Contrôles & Ajout de Base (Gauche) */}
+        <div className="flex flex-col gap-4">
+          <Card className="border-border/60 bg-card/85 p-4 text-foreground shadow-2xl shadow-black/20 backdrop-blur lg:h-fit">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-border/60 bg-muted/35 p-3">
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Niveau de Zoom</div>
+                <div className="mt-1 text-2xl font-semibold">{zoom + 1}x</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {zoom >= 6 ? 'Joueurs dissociés' : 'Le regroupement s\'estompe en zoomant'}
+                </div>
+              </div>
+
+              <div className="space-y-3 rounded-xl border border-border/60 bg-muted/35 p-4">
+                <ControlRow label="Points de téléportation" checked={showFastTravels} onCheckedChange={setShowFastTravels} />
+                <ControlRow label="Tours de Boss" checked={showBossTowers} onCheckedChange={setShowBossTowers} />
+                <ControlRow label="Afficher les joueurs" checked={showPlayers} onCheckedChange={setShowPlayers} />
+                <ControlRow label="Bases des joueurs" checked={showBases} onCheckedChange={setShowBases} />
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/35 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">Position GPS</span>
+                <span className="font-mono text-foreground">{mousePosition[0]}, {mousePosition[1]}</span>
+              </div>
+
+              <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/45 px-3 py-4 shadow-xl">
+                <Button size="icon" variant="ghost" onClick={() => setZoom((current) => clamp(current + 1, MIN_ZOOM, MAX_ZOOM))}>
+                  <PlusIcon className="h-4 w-4" />
+                </Button>
+                <div className="graph-line-rounded flex h-2 flex-1 items-center rounded-full bg-muted/45 p-[2px]">
+                  <div className="graph-line-rounded h-full rounded-full bg-primary transition-all" style={{ width: `${((zoom + 1) / (MAX_ZOOM + 1)) * 100}%` }} />
+                </div>
+                <Button size="icon" variant="ghost" onClick={() => setZoom((current) => clamp(current - 1, MIN_ZOOM, MAX_ZOOM))}>
+                  <MinusIcon className="h-4 w-4" />
+                </Button>
               </div>
             </div>
-
-            <div className="space-y-3 rounded-xl border border-border/60 bg-muted/35 p-4">
-              <ControlRow label="Points de téléportation" checked={showFastTravels} onCheckedChange={setShowFastTravels} />
-              <ControlRow label="Tours de Boss" checked={showBossTowers} onCheckedChange={setShowBossTowers} />
-              <ControlRow label="Afficher les joueurs" checked={showPlayers} onCheckedChange={setShowPlayers} />
-              <ControlRow label="Bases des joueurs" checked={showBases} onCheckedChange={setShowBases} />
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/35 px-3 py-2 text-sm">
-              <span className="text-muted-foreground">Position GPS</span>
-              <span className="font-mono text-foreground">{mousePosition[0]}, {mousePosition[1]}</span>
-            </div>
-
-            <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/45 px-3 py-4 shadow-xl">
-              <Button size="icon" variant="ghost" onClick={() => setZoom((current) => clamp(current + 1, MIN_ZOOM, MAX_ZOOM))}>
-                <PlusIcon className="h-4 w-4" />
-              </Button>
-              <div className="graph-line-rounded flex h-2 flex-1 items-center rounded-full bg-muted/45 p-[2px]">
-                <div className="graph-line-rounded h-full rounded-full bg-primary transition-all" style={{ width: `${((zoom + 1) / (MAX_ZOOM + 1)) * 100}%` }} />
-              </div>
-              <Button size="icon" variant="ghost" onClick={() => setZoom((current) => clamp(current - 1, MIN_ZOOM, MAX_ZOOM))}>
-                <MinusIcon className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </Card>
-
-        {/* COLONNE 2 : Carte (Centre) */}
-        <div className="flex flex-col gap-4 min-w-0">
-          
-          {/* Bandeau : Ajouter une base */}
-          <Card className="flex items-center justify-between border-border/60 bg-card/85 p-3 px-5 text-foreground shadow-lg backdrop-blur">
-            <div className="flex flex-col">
-              <span className="font-semibold text-sm">Cartographie du serveur</span>
-              {isAddingBase && !newBaseCoords ? (
-                <span className="text-xs text-primary font-medium animate-pulse">Cliquez sur la carte à l'emplacement de votre base...</span>
-              ) : (
-                <span className="text-xs text-muted-foreground">Ajoutez votre base pour la rendre visible par tous.</span>
-              )}
-            </div>
-            {!isAddingBase && (
-              <Button onClick={() => setIsAddingBase(true)} size="sm" className="gap-2">
-                <MapPinIcon className="h-4 w-4" /> Ajouter ma base
-              </Button>
-            )}
-            {isAddingBase && (
-              <Button variant="outline" size="sm" onClick={() => { setIsAddingBase(false); setNewBaseCoords(null) }}>
-                Annuler
-              </Button>
-            )}
           </Card>
 
-          {/* Wrapper de la carte */}
-          <div className="relative flex flex-1 min-h-[60vh] items-center justify-center overflow-hidden rounded-2xl border border-border/60 bg-card/40">
+          {/* NOUVEAU BLOC : Gestion des Bases */}
+          <Card className="border-border/60 bg-card/85 p-4 text-foreground shadow-2xl shadow-black/20 backdrop-blur">
+            <h3 className="font-semibold text-lg mb-2">Vos Bases</h3>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Ajoutez vos bases pour les partager avec la communauté.
+              </p>
+              
+              {!isAddingBase ? (
+                <Button onClick={() => setIsAddingBase(true)} className="w-full gap-2">
+                  <MapPinIcon className="h-4 w-4" /> Signaler ma base
+                </Button>
+              ) : (
+                <div className="rounded-lg border border-primary/40 bg-primary/10 p-3 text-center">
+                  <span className="text-xs text-primary font-medium block mb-2 animate-pulse">
+                    Faites un clic gauche sur la carte à l'emplacement exact !
+                  </span>
+                  <Button variant="outline" size="sm" className="w-full" onClick={() => { setIsAddingBase(false); setNewBaseCoords(null) }}>
+                    Annuler l'action
+                  </Button>
+                </div>
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {/* COLONNE 2 : Carte (Centre) */}
+        <div className="flex min-w-0 h-full">
+          <div className="relative flex flex-1 w-full min-h-[60vh] items-center justify-center overflow-hidden rounded-2xl border border-border/60 bg-card/40">
             <div
               className={`relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-background/40 shadow-2xl shadow-black/20 ${getCursorStyle()}`}
               style={{ width: 'min(100%, 920px)', overscrollBehavior: 'contain' }}
@@ -430,9 +433,9 @@ export function LiveMap() {
                       key={base.id || `${base.location_x}-${base.location_y}`}
                       className="absolute z-20 flex flex-col items-center justify-center"
                       style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
-                      title={`${base.player_name} (${base.guild_name || 'Solo'})`}
+                      title={`${base.player_name} (${base.base_type})`}
                     >
-                      <div className="h-6 w-6 rounded-sm border-2 border-black/80 shadow-lg" style={{ backgroundColor: base.color_hex || '#3b82f6' }} />
+                      <div className={`h-6 w-6 rounded-sm border-2 border-black/80 shadow-lg ${base.base_type === 'principale' ? 'rounded-md' : 'rounded-full'}`} style={{ backgroundColor: base.color_hex || '#3b82f6' }} />
                       {zoom >= 4 && (
                         <span className="mt-1 whitespace-nowrap rounded bg-black/75 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur">
                           {base.player_name}
@@ -442,7 +445,7 @@ export function LiveMap() {
                   )
                 })}
 
-                {/* Marqueurs (Fast Travel, Boss, etc...) */}
+                {/* Marqueurs */}
                 {showFastTravels && fastTravelMarkers.map((point) => (
                   <img key={point.key} src="/palworld-map/fast_travel.webp" alt="Fast Travel" className="absolute z-20 h-7 w-7 select-none object-contain drop-shadow-md" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} draggable={false} />
                 ))}
@@ -474,47 +477,6 @@ export function LiveMap() {
                   )
                 })}
               </div>
-
-              {/* MODAL : Formulaire d'ajout de base (s'affiche par-dessus la carte une fois cliquée) */}
-              {newBaseCoords && (
-                <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
-                  <Card className="w-full max-w-sm p-6 shadow-2xl border-primary/50">
-                    <h3 className="text-xl font-bold mb-2">Enregistrer ma base</h3>
-                    <p className="text-sm text-muted-foreground mb-6">
-                      Position: X: {newBaseCoords.x.toFixed(0)} | Y: {newBaseCoords.y.toFixed(0)}
-                    </p>
-                    
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Nom de la base ou du Joueur</label>
-                        <input 
-                          type="text"
-                          className="w-full p-2 rounded-md border bg-background text-sm" 
-                          value={formData.name}
-                          onChange={e => setFormData({...formData, name: e.target.value})}
-                          placeholder="Ex: Forteresse de Kévin"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Couleur sur la carte</label>
-                        <div className="flex gap-2">
-                          <input 
-                            type="color" 
-                            className="h-9 w-14 rounded cursor-pointer bg-background"
-                            value={formData.color}
-                            onChange={e => setFormData({...formData, color: e.target.value})}
-                          />
-                          <span className="text-xs text-muted-foreground flex items-center">Choisis ta couleur !</span>
-                        </div>
-                      </div>
-                      <div className="flex gap-3 justify-end pt-4 border-t">
-                        <Button variant="ghost" onClick={() => { setIsAddingBase(false); setNewBaseCoords(null) }}>Annuler</Button>
-                        <Button onClick={saveBase} disabled={!formData.name}>Sauvegarder</Button>
-                      </div>
-                    </div>
-                  </Card>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -548,6 +510,62 @@ export function LiveMap() {
         </Card>
 
       </div>
+
+      {/* MODAL : Formulaire d'ajout de base (Déplacé à la racine pour éviter les conflits de clic/focus avec la carte) */}
+      {newBaseCoords && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
+          <Card className="w-full max-w-sm p-6 shadow-2xl border-primary/50 bg-card">
+            <h3 className="text-xl font-bold mb-2">Enregistrer ma base</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Position GPS: X: {newBaseCoords.x.toFixed(0)} | Y: {newBaseCoords.y.toFixed(0)}
+            </p>
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Nom de la base ou du joueur</label>
+                <input 
+                  type="text"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
+                  value={formData.name}
+                  onChange={e => setFormData({...formData, name: e.target.value})}
+                  placeholder="Ex: Forteresse de Kévin"
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Type de base</label>
+                <select
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={formData.type}
+                  onChange={e => setFormData({...formData, type: e.target.value})}
+                >
+                  <option value="principale">Base Principale (Carré)</option>
+                  <option value="secondaire">Base Secondaire / Minage (Rond)</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Couleur sur la carte</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="color" 
+                    className="h-10 w-16 rounded cursor-pointer bg-background border border-input p-1"
+                    value={formData.color}
+                    onChange={e => setFormData({...formData, color: e.target.value})}
+                  />
+                  <span className="text-xs text-muted-foreground flex items-center">Choisis ta couleur !</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3 justify-end pt-4 border-t border-border">
+                <Button variant="ghost" onClick={() => { setIsAddingBase(false); setNewBaseCoords(null) }}>Annuler</Button>
+                <Button onClick={saveBase} disabled={!formData.name}>Sauvegarder</Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   )
 }
