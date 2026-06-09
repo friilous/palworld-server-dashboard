@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MinusIcon, PlusIcon, RefreshCwIcon } from 'lucide-react'
+import { MinusIcon, PlusIcon, RefreshCwIcon, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -12,9 +12,7 @@ import type { Player } from '@/lib/types'
 import points from '@/lib/map-points.json'
 import { supabase } from '@/lib/supabase'
 
-// ⚠️ IMPORTANT : Assure-toi d'avoir ce fichier créé dans ton projet avec tes identifiants Supabase
-// import { supabase } from '@/lib/supabase' 
-
+// --- CONSTANTES ET UTILS ---
 const LANDSCAPE = [447900, 708920, -999940, -738920] as const
 const MAP_IMAGE_URL = '/palworld-map/full-map-z4.png'
 const MIN_ZOOM = 0
@@ -105,12 +103,18 @@ function ControlRow({
 
 export function LiveMap() {
   const { config, connectionStatus, players, setPlayers } = useServer()
+  
+  // États Globaux
   const [zoom, setZoom] = useState(2)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [mousePosition, setMousePosition] = useState<[string, string]>(['0.00', '0.00'])
+  
+  // Toggles d'affichage
   const [showPlayers, setShowPlayers] = useState(true)
   const [showBossTowers, setShowBossTowers] = useState(false)
   const [showFastTravels, setShowFastTravels] = useState(false)
+  const [showBases, setShowBases] = useState(true) // <-- Nouveau toggle pour les bases
+  
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshCountdownMs, setRefreshCountdownMs] = useState(REFRESH_INTERVAL_MS)
   const [mapImageLoaded, setMapImageLoaded] = useState(false)
@@ -120,8 +124,12 @@ export function LiveMap() {
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
   const [mapSize, setMapSize] = useState({ width: MAP_SIZE_FALLBACK, height: MAP_SIZE_FALLBACK })
   
-  // NOUVEAU : State pour stocker les timers des boss
+  // États Supabase
   const [bossTimers, setBossTimers] = useState<any[]>([])
+  const [bases, setBases] = useState<any[]>([])
+  const [isAddingBase, setIsAddingBase] = useState(false)
+  const [newBaseCoords, setNewBaseCoords] = useState<{ x: number, y: number } | null>(null)
+  const [formData, setFormData] = useState({ name: '', faction: '', type: 'secondary' })
 
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const mapPlaneRef = useRef<HTMLDivElement | null>(null)
@@ -148,6 +156,40 @@ export function LiveMap() {
     })),
     []
   )
+
+  // --- LOGIQUE SUPABASE FUSIONNÉE ---
+  const fetchData = useCallback(async () => {
+    const [basesRes, timersRes] = await Promise.all([
+      supabase.from('player_bases').select('*'),
+      supabase.from('boss_timers').select('*')
+    ])
+    if (basesRes.data) setBases(basesRes.data)
+    if (timersRes.data) setBossTimers(timersRes.data)
+  }, [])
+
+  useEffect(() => {
+    fetchData()
+    const channel = supabase.channel('realtime-db')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'player_bases' }, fetchData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'boss_timers' }, fetchData)
+      .subscribe()
+    
+    return () => { supabase.removeChannel(channel) }
+  }, [fetchData])
+
+  // --- ACTIONS ---
+  const saveBase = async () => {
+    if (!newBaseCoords) return
+    await supabase.from('player_bases').insert([{
+      player_name: formData.name, 
+      guild_name: formData.faction,
+      base_type: formData.type, 
+      location_x: newBaseCoords.x,
+      location_y: newBaseCoords.y, 
+      color_hex: '#FFD700'
+    }])
+    setIsAddingBase(false)
+  }
 
   const refreshPlayers = useCallback(async () => {
     if (!config) return
@@ -177,28 +219,6 @@ export function LiveMap() {
       setIsRefreshing(false)
     }
   }, [refreshPlayers])
-
-
-  useEffect(() => {
-    // Si tu n'as pas encore importé supabase, commente ce bloc entier en attendant
-    // 1. Récupérer les timers au chargement de la page
-    const fetchInitialTimers = async () => {
-      const { data, error } = await supabase.from('boss_timers').select('*')
-      if (data) setBossTimers(data)
-    }
-    fetchInitialTimers()
-
-    // 2. Écouter les changements en direct
-    const channel = supabase
-      .channel('schema-db-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'boss_timers' }, payload => {
-        // Au lieu de gérer la logique complexe, on recharge juste la liste
-        fetchInitialTimers() 
-      })
-      .subscribe()
-
-    return () => { supabase.removeChannel(channel) }
-  }, [])
 
   useEffect(() => {
     const updateVisibility = () => setIsPageVisible(!document.hidden)
@@ -422,6 +442,7 @@ export function LiveMap() {
               <ControlRow label="Points de téléportation" checked={showFastTravels} onCheckedChange={setShowFastTravels} />
               <ControlRow label="Tours de Boss" checked={showBossTowers} onCheckedChange={setShowBossTowers} />
               <ControlRow label="Afficher les joueurs" checked={showPlayers} onCheckedChange={setShowPlayers} />
+              <ControlRow label="Bases des joueurs" checked={showBases} onCheckedChange={setShowBases} />
             </div>
 
             <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/35 px-3 py-2 text-sm">
@@ -495,6 +516,33 @@ export function LiveMap() {
               <div className="pointer-events-none absolute left-3 top-3 z-30 rounded-full border border-primary/45 bg-primary/15 px-3 py-1 text-xs font-semibold tracking-[0.2em] text-primary">
                 CARTE EN DIRECT
               </div>
+
+              {/* Rendu des Bases des Joueurs */}
+              {showBases && bases.map((base) => {
+                const position = toScreenPercent([base.location_x, base.location_y])
+                return (
+                  <div
+                    key={base.id || `${base.location_x}-${base.location_y}`}
+                    className="absolute z-20 flex flex-col items-center justify-center"
+                    style={{
+                      ...position,
+                      transform: `translate(-50%, -50%) scale(${1 / scale})`
+                    }}
+                    title={`${base.player_name || 'Inconnu'} (${base.guild_name || 'Sans guilde'})`}
+                  >
+                    {/* Icône de base (carré de couleur, tu peux remplacer par une balise img) */}
+                    <div 
+                      className="h-6 w-6 rounded-sm border-2 border-black/80 shadow-lg"
+                      style={{ backgroundColor: base.color_hex || '#3b82f6' }}
+                    />
+                    {zoom >= 4 && (
+                      <span className="mt-1 whitespace-nowrap rounded bg-black/75 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur">
+                        {base.player_name}
+                      </span>
+                    )}
+                  </div>
+                )
+              })}
 
               {showFastTravels &&
                 fastTravelMarkers.map((point) => (
