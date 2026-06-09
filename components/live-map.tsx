@@ -10,6 +10,7 @@ import { buildPalworldProxyHeaders, buildPalworldProxyPath, getPlayerKey, normal
 import { useServer } from '@/lib/server-context'
 import type { Player } from '@/lib/types'
 import points from '@/lib/map-points.json'
+import { supabase } from '@/lib/supabase'
 
 // ⚠️ IMPORTANT : Assure-toi d'avoir ce fichier créé dans ton projet avec tes identifiants Supabase
 // import { supabase } from '@/lib/supabase' 
