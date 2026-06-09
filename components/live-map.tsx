@@ -450,24 +450,29 @@ export function LiveMap() {
                 {/* Bases des Joueurs */}
                 {showBases && bases.map((base) => {
                   const position = toScreenPercent([base.location_x, base.location_y])
+                  
+                  // Logique de taille et de label
+                  const isMain = base.base_type === 'main'
+                  const iconSize = isMain ? 24 : 16 // Plus petit pour les secondaires
+                  const label = base.base_type === 'main' ? 'Principale' : base.base_type.replace('_', ' ')
+
                   return (
                     <div
                       key={base.id}
                       className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group"
                       style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
-                      title={`${base.player_name} (${base.base_type})`}
                     >
-                      {/* Icône seule, sans conteneur de fond */}
+                      {/* Icône avec taille dynamique */}
                       <div 
-                        className="drop-shadow-md"
+                        className="drop-shadow-md transition-transform group-hover:scale-110"
                         style={{ color: base.color_hex || '#3b82f6' }}
                       >
-                        <HomeIcon size={24} strokeWidth={2.5} />
+                        <HomeIcon size={iconSize} strokeWidth={2.5} />
                       </div>
                       
-                      {/* Nom affiché au survol avec une ombre pour la lisibilité */}
-                      <span className="mt-1 whitespace-nowrap rounded bg-black/80 px-2 py-0.5 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-sm">
-                        {base.player_name}
+                      {/* Nom + Type affichés au survol */}
+                      <span className="mt-1 whitespace-nowrap rounded bg-black/80 px-2 py-0.5 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border border-white/10">
+                        {base.player_name} <span className="text-gray-400 font-normal">({label})</span>
                       </span>
                     </div>
                   )
@@ -568,10 +573,10 @@ export function LiveMap() {
                   value={formData.type}
                   onChange={e => setFormData({...formData, type: e.target.value})}
                 >
-                  <option value="main">Base Principale</option>
-                  <option value="sub_1">Base Secondaire 1</option>
-                  <option value="sub_2">Base Secondaire 2</option>
-                  <option value="sub_3">Base Secondaire 3</option>
+                  <option value="main">⭐ Base Principale</option>
+                  <option value="sub_1">🏠 Base Secondaire 1</option>
+                  <option value="sub_2">🏠 Base Secondaire 2</option>
+                  <option value="sub_3">🏠 Base Secondaire 3</option>
                 </select>
               </div>
 
