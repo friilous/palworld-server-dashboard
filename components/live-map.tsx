@@ -166,10 +166,11 @@ export function LiveMap() {
 
       const respawnTime = new Date(Date.now() + BOSS_RESPAWN_TIME_MS).toISOString()
       const bossKey = `manual-boss-${Date.now()}`
+      const newId = crypto.randomUUID() // Génération d'un UUID valide pour ta BDD
 
-      // 1. Mise à jour immédiate de l'interface (Optimistic UI) pour que la liste s'affiche de suite
+      // 1. Mise à jour immédiate
       const newTimer = { 
-        id: Date.now(), // ID temporaire
+        id: newId, 
         boss_key: bossKey, 
         name: bossName, 
         respawn_time: respawnTime, 
@@ -177,8 +178,9 @@ export function LiveMap() {
       }
       setBossTimers(prev => [...prev, newTimer])
 
-      // 2. Sauvegarde en base de données
+      // 2. Sauvegarde en base de données avec l'ID inclus
       const { error } = await supabase.from('boss_timers').upsert([{ 
+        id: newId,
         boss_key: bossKey,
         name: bossName,
         respawn_time: respawnTime,
