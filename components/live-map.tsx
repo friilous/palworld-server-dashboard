@@ -371,47 +371,65 @@ export function LiveMap() {
                 </div>
               ))}
 
+              
               {showBases && basesWithPlayers.map((base) => {
-                const position = toScreenPercent([base.location_x, base.location_y])
-                const isMain = base.base_type === 'main'
-                return (
-                  <div key={base.id} className="absolute z-20 cursor-pointer group" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
-                    
-                  {/* L'indicateur Hologramme Ultra-Compact */}
-                  {base.players && base.players.length > 0 && (
-                    <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded-[3px] border-b border-green-400 shadow-md z-10 pointer-events-none transition-transform group-hover:-translate-y-1">
-                      {/* Mini égaliseur réduit */}
-                      <div className="flex gap-[1px] items-end h-1.5">
-                        <div className="w-[1.5px] h-full bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '0ms' }} />
-                        <div className="w-[1.5px] h-[60%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '150ms' }} />
-                        <div className="w-[1.5px] h-[80%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '300ms' }} />
-                      </div>
-                      <span className="text-[7px] font-bold text-green-400 tracking-wider uppercase leading-none">
-                        {base.players.length}
-                      </span>
-                    </div>
-                  )}
+                              const position = toScreenPercent([base.location_x, base.location_y])
+                              const isMain = base.base_type === 'main'
+                              
+                              // 1. On vérifie simplement s'il y a du monde dans la base
+                              const isActive = base.players && base.players.length > 0
 
-                    <img src="/palworld-map/pin-base.png" alt="Base" className={`drop-shadow-xl transition-transform duration-300 group-hover:scale-125 object-contain -translate-y-1/2 ${isMain ? "h-14 w-14" : "h-8 w-8"}`} draggable={false} />
+                              return (
+                                <div key={base.id} className="absolute z-20 cursor-pointer group" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
+                                  
+                                  {/* L'indicateur Hologramme Ultra-Compact */}
+                                  {isActive && (
+                                    <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded-[3px] border-b border-green-400 shadow-md z-10 pointer-events-none transition-transform group-hover:-translate-y-1">
+                                      <div className="flex gap-[1px] items-end h-1.5">
+                                        <div className="w-[1.5px] h-full bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '0ms' }} />
+                                        <div className="w-[1.5px] h-[60%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '150ms' }} />
+                                        <div className="w-[1.5px] h-[80%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '300ms' }} />
+                                      </div>
+                                      <span className="text-[7px] font-bold text-green-400 tracking-wider uppercase leading-none">
+                                        {base.players.length} dans la base
+                                      </span>
+                                    </div>
+                                  )}
 
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 pointer-events-none rounded-md bg-black/85 px-3 py-1.5 shadow-lg backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-30 flex flex-col items-center w-max">
-                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                        {base.player_name}
-                        <span className="text-gray-400 text-[10px] font-normal">({isMain ? 'Principale' : 'Secondaire'})</span>
-                      </span>
-                      
-                      {base.players && base.players.length > 0 && (
-                        <div className="mt-1 pt-1 border-t border-white/10 w-full flex flex-col items-center">
-                          <span className="text-[10px] text-green-400 font-semibold mb-0.5">🟢 {base.players.length} Joueur(s) dans la base</span>
-                          {base.players.map((p: any) => <span key={p.name} className="text-[9px] text-gray-300">{p.name}</span>)}
-                        </div>
-                      )}
-                      
-                      <span className="mt-1.5 text-[9px] text-red-400 font-normal italic">(Double-clic pour suppr.)</span>
-                    </div>
-                  </div>
-                )
-              })}
+                                  {/* 🟢 L'AURA QUI PULSE ICI 🟢 */}
+                                  {isActive && (
+                                    <div 
+                                      className="aura-online" 
+                                      style={{ 
+                                        width: isMain ? '120px' : '80px', 
+                                        height: isMain ? '120px' : '80px',
+                                        /* On remonte légèrement l'aura pour s'aligner avec le -translate-y-1/2 de ton icône */
+                                        marginTop: isMain ? '-14px' : '-8px' 
+                                      }}
+                                    />
+                                  )}
+
+                                  <img src="/palworld-map/pin-base.png" alt="Base" className={`relative z-10 drop-shadow-xl transition-transform duration-300 group-hover:scale-125 object-contain -translate-y-1/2 ${isMain ? "h-14 w-14" : "h-8 w-8"}`} draggable={false} />
+
+                                  {/* L'étiquette (Tooltip) au survol */}
+                                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 pointer-events-none rounded-md bg-black/85 px-3 py-1.5 shadow-lg backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-30 flex flex-col items-center w-max">
+                                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                                      {base.player_name}
+                                      <span className="text-gray-400 text-[10px] font-normal">({isMain ? 'Principale' : 'Secondaire'})</span>
+                                    </span>
+                                    
+                                    {isActive && (
+                                      <div className="mt-1 pt-1 border-t border-white/10 w-full flex flex-col items-center">
+                                        <span className="text-[10px] text-green-400 font-semibold mb-0.5">🟢 {base.players.length} Joueur(s) dans la base</span>
+                                        {base.players.map((p: any) => <span key={p.name} className="text-[9px] text-gray-300">{p.name}</span>)}
+                                      </div>
+                                    )}
+                                    
+                                    <span className="mt-1.5 text-[9px] text-red-400 font-normal italic">(Double-clic pour suppr.)</span>
+                                  </div>
+                                </div>
+                              )
+                            })}
 
               {showBossTowers && bossTowerMarkers.map((point) => (
                 <div key={point.key} className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
