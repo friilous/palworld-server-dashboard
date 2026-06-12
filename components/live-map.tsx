@@ -371,7 +371,7 @@ export function LiveMap() {
                 </div>
               ))}
 
-              
+
               {showBases && basesWithPlayers.map((base) => {
                               const position = toScreenPercent([base.location_x, base.location_y])
                               const isMain = base.base_type === 'main'
@@ -382,29 +382,28 @@ export function LiveMap() {
                               return (
                                 <div key={base.id} className="absolute z-20 cursor-pointer group" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
                                   
-                                  {/* L'indicateur Hologramme Ultra-Compact */}
+                                  {/* Indicateur de présence */}
                                   {isActive && (
-                                    <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded-[3px] border-b border-green-400 shadow-md z-10 pointer-events-none transition-transform group-hover:-translate-y-1">
-                                      <div className="flex gap-[1px] items-end h-1.5">
-                                        <div className="w-[1.5px] h-full bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '0ms' }} />
-                                        <div className="w-[1.5px] h-[60%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '150ms' }} />
-                                        <div className="w-[1.5px] h-[80%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '300ms' }} />
+                                    <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/90 backdrop-blur-md px-2 py-1 rounded-md border border-green-500/50 shadow-lg z-10 pointer-events-none whitespace-nowrap">
+                                      <div className="flex gap-[2px] items-end h-2">
+                                        <div className="w-[2px] h-full bg-green-400 animate-[bounce_1s_infinite]" />
+                                        <div className="w-[2px] h-[60%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '150ms' }} />
                                       </div>
-                                      <span className="text-[7px] font-bold text-green-400 tracking-wider uppercase leading-none">
-                                        {base.players.length} dans la base
+                                      <span className="text-[10px] font-bold text-green-400 uppercase">
+                                        {base.players.length} joueur{base.players.length > 1 ? 's' : ''}
                                       </span>
                                     </div>
                                   )}
 
-                                  {/* 🟢 L'AURA QUI PULSE ICI 🟢 */}
+                                  {/* AURA PLUS PETITE ET PLUS VISIBLE */}
                                   {isActive && (
                                     <div 
-                                      className="aura-online" 
+                                      className="absolute top-0 left-1/2 -translate-x-1/2 rounded-full bg-green-500/30 animate-pulse" 
                                       style={{ 
-                                        width: isMain ? '120px' : '80px', 
-                                        height: isMain ? '120px' : '80px',
-                                        /* On remonte légèrement l'aura pour s'aligner avec le -translate-y-1/2 de ton icône */
-                                        marginTop: isMain ? '-14px' : '-8px' 
+                                        width: isMain ? '50px' : '30px',  // Réduit de 50%
+                                        height: isMain ? '50px' : '30px', // Réduit de 50%
+                                        marginTop: '-25px',               // Ajusté pour rester centré
+                                        boxShadow: '0 0 15px 5px rgba(34, 197, 94, 0.6)' // Plus visible (+50% opacité)
                                       }}
                                     />
                                   )}
