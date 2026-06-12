@@ -193,20 +193,6 @@ export function LiveMap() {
       broadcastToChat(`Le boss ${bossName} est vaincu. Respawn dans 1h !`)
     }
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date()
-      bossTimers.forEach(async (timer) => {
-        if (!timer.notified_respawn && new Date(timer.respawn_time) <= now) {
-          broadcastToChat(`Le boss ${timer.name} est de nouveau disponible !`)
-          await supabase.from('boss_timers').update({ notified_respawn: true }).eq('id', timer.id)
-          fetchData()
-        }
-      })
-    }, 10000)
-    return () => clearInterval(interval)
-  }, [bossTimers, fetchData])
-
   const refreshPlayers = useCallback(async () => { /* Logique inchangée */ }, [config, setPlayers])
 
   useEffect(() => {
