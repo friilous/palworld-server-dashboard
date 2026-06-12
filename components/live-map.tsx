@@ -412,37 +412,7 @@ export function LiveMap() {
           )}
         </div>
 
-        {/* PANNEAU FLOTTANT DROIT */}
-        <div className="absolute right-6 top-6 z-50 flex hidden w-[280px] flex-col lg:flex max-h-[calc(100%-3rem)] pointer-events-none">
-          <Card className="pointer-events-auto flex flex-col border-white/10 bg-background/60 text-foreground shadow-2xl backdrop-blur-xl rounded-2xl max-h-full">
-            <div className="p-5 border-b border-white/10 flex items-center justify-between">
-              <h3 className="font-bold text-lg flex items-center gap-2">
-                <UsersIcon className="h-5 w-5 text-primary" /> Joueurs en ligne
-              </h3>
-              <Badge variant="default" className="bg-primary/20 text-primary border-primary/30 shadow-none">{players.length}</Badge>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-3 space-y-1 custom-scrollbar">
-              {players.length === 0 ? (
-                <div className="p-6 text-center text-sm text-muted-foreground/60 italic">
-                  Aucun joueur en ligne.
-                </div>
-              ) : (
-                [...players].sort((a, b) => (b.level || 0) - (a.level || 0)).map((p) => (
-                  <div key={getPlayerKey(p)} className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/10 transition-colors border border-transparent hover:border-white/5">
-                    <div className="h-10 w-10 shrink-0 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center shadow-inner">
-                      <img src="/palworld-map/pin-joueur.png" alt="Avatar" className="h-6 w-6 object-contain" />
-                    </div>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-sm font-bold truncate text-foreground/90">{p.name}</span>
-                      <span className="text-xs text-muted-foreground">Niv. {p.level || '?'}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </Card>
-        </div>
+
       </div>
 
       {/* MODALS */}
