@@ -158,40 +158,42 @@ export function LiveMap() {
 
   // --- CORRECTION: Formulaire de Boss ---
   const markBossDefeated = async () => {
-      if (!bossFormName) return
-      
-      const bossName = bossFormName
-      setIsReportingBoss(false)
-      setBossFormName('')
+    if (!bossFormName) return
+    
+    const bossName = bossFormName
+    setIsReportingBoss(false)
+    setBossFormName('')
 
-      const respawnTime = new Date(Date.now() + BOSS_RESPAWN_TIME_MS).toISOString()
-      const bossKey = `manual-boss-${Date.now()}`
-      const newId = crypto.randomUUID() // Génération d'un UUID valide pour ta BDD
+    // 1. Calculer le respawn (Maintenant + 1h)
+    const now = new Date()
+    const respawnDate = new Date(now.getTime() + BOSS_RESPAWN_TIME_MS)
+    
+    // 2. Formater l'heure pour le message (Heure Paris)
+    const heureParis = respawnDate.toLocaleTimeString('fr-FR', {
+      timeZone: 'Europe/Paris',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
 
-      // 1. Mise à jour immédiate
-      const newTimer = { 
-        id: newId, 
-        boss_key: bossKey, 
-        name: bossName, 
-        respawn_time: respawnTime, 
-        notified_respawn: false 
-      }
-      setBossTimers(prev => [...prev, newTimer])
+    const bossKey = `manual-boss-${Date.now()}`
+    const newId = crypto.randomUUID()
 
-      // 2. Sauvegarde en base de données avec l'ID inclus
-      const { error } = await supabase.from('boss_timers').upsert([{ 
-        id: newId,
-        boss_key: bossKey,
-        name: bossName,
-        respawn_time: respawnTime,
-        notified_respawn: false 
-      }])
-
-      if (error) console.error("Erreur d'enregistrement Supabase :", error)
-
-      // 3. Envoi du message RCON
-      broadcastToChat(`Le boss ${bossName} est vaincu. Respawn dans 1h !`)
+    // 3. Mise à jour locale
+    const newTimer = { 
+      id: newId, 
+      boss_key: bossKey, 
+      name: bossName, 
+      respawn_time: respawnDate.toISOString(), 
+      notified_respawn: false 
     }
+    setBossTimers(prev => [...prev, newTimer])
+
+    // 4. Sauvegarde DB
+    await supabase.from('boss_timers').upsert([newTimer])
+
+    // 5. Envoi du message formaté
+    broadcastToChat(`>>>>> ${bossName} est vaincu. Respawn prévu à ${heureParis} <<<<<`)
+  }
 
   const refreshPlayers = useCallback(async () => { /* Logique inchangée */ }, [config, setPlayers])
 

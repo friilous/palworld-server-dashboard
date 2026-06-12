@@ -31,7 +31,7 @@ export async function GET(request: Request) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${process.env.CRON_SECRET}` // Important pour la sécurité !
         },
-        body: JSON.stringify({ message: `>>>>> ALERTE : Le boss ${timer.name} est de nouveau disponible ! <<<<<` })
+        body: JSON.stringify({ message: `>>>>> ALERTE : ${timer.name} est de nouveau disponible ! <<<<<` })
       })
       
 
