@@ -138,7 +138,7 @@ export function LiveMap() {
       await fetch('/api/palworld/announce', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(message) // Directement la chaîne de caractères
+        body: JSON.stringify({ message }) 
       })
     } catch (e) {
       console.error("Erreur d'envoi du message chat", e)
@@ -198,7 +198,7 @@ export function LiveMap() {
       const now = new Date()
       bossTimers.forEach(async (timer) => {
         if (!timer.notified_respawn && new Date(timer.respawn_time) <= now) {
-          broadcastToChat(`🔥 Le boss ${timer.name} est de nouveau disponible !`)
+          broadcastToChat(`Le boss ${timer.name} est de nouveau disponible !`)
           await supabase.from('boss_timers').update({ notified_respawn: true }).eq('id', timer.id)
           fetchData()
         }
