@@ -80,8 +80,8 @@ export function LiveMap() {
   const [, setMousePosition] = useState<[string, string]>(['0.00', '0.00'])
   
   const [showPlayers, setShowPlayers] = useState(true)
-  const [showBossTowers, setShowBossTowers] = useState(false) // Caché par défaut
-  const [showFastTravels, setShowFastTravels] = useState(true) // Visible par défaut
+  const [showBossTowers, setShowBossTowers] = useState(false)
+  const [showFastTravels, setShowFastTravels] = useState(true)
   const [showBases, setShowBases] = useState(true)
   
   const [, setMapImageLoaded] = useState(false)
@@ -95,7 +95,6 @@ export function LiveMap() {
   const [newBaseCoords, setNewBaseCoords] = useState<{ x: number, y: number } | null>(null)
   const [formData, setFormData] = useState({ name: '', faction: '', type: 'main', color: '#3b82f6' })
 
-  // Formulaire indépendant pour les boss
   const [isReportingBoss, setIsReportingBoss] = useState(false)
   const [bossFormName, setBossFormName] = useState('')
 
@@ -157,23 +156,31 @@ export function LiveMap() {
     }
   }
 
-  // Soumission manuelle du formulaire de Boss
+  // --- CORRECTION: Formulaire de Boss ---
   const markBossDefeated = async () => {
     if (!bossFormName) return
-    const respawnTime = new Date(Date.now() + BOSS_RESPAWN_TIME_MS).toISOString()
-    const bossKey = `manual-boss-${Date.now()}` // Clé unique puisque ce n'est pas encore lié à la carte
+    
+    // On copie le nom du boss et on ferme l'UI immédiatement pour rendre l'action fluide
+    const bossName = bossFormName
+    setIsReportingBoss(false)
+    setBossFormName('')
 
-    const { error } = await supabase.from('boss_timers').insert([{ 
+    const respawnTime = new Date(Date.now() + BOSS_RESPAWN_TIME_MS).toISOString()
+    const bossKey = `manual-boss-${Date.now()}`
+
+    // Utilisation de upsert pour réduire les chances d'erreur de clé primaire
+    const { error } = await supabase.from('boss_timers').upsert([{ 
       boss_key: bossKey,
-      name: bossFormName,
+      name: bossName,
       respawn_time: respawnTime,
       notified_respawn: false 
     }])
 
-    if (!error) {
-      setIsReportingBoss(false)
-      setBossFormName('')
-      broadcastToChat(`⚔️ Le boss ${bossFormName} vient d'etre vaincu ! Reapparition dans 60 minutes.`)
+    if (error) {
+      console.error("Erreur lors de l'enregistrement du boss dans Supabase :", error)
+      // On peut alerter l'utilisateur ou laisser tomber, mais l'UI ne reste plus figée.
+    } else {
+      broadcastToChat(`⚔️ Le boss ${bossName} vient d'etre vaincu ! Reapparition dans 60 minutes.`)
       fetchData()
     }
   }
@@ -253,7 +260,7 @@ export function LiveMap() {
             >
               <img src={MAP_IMAGE_URL} alt="Carte du monde Palworld" className="block h-full w-full select-none" draggable={false} onLoad={() => { setMapImageLoaded(true); setMapImageError(false) }} onError={() => { setMapImageLoaded(false); setMapImageError(true) }} />
 
-              {/* Fast Travels (Désormais des images) */}
+              {/* Fast Travels */}
               {showFastTravels && fastTravelMarkers.map((marker) => (
                 <div 
                   key={marker.key} 
@@ -278,7 +285,7 @@ export function LiveMap() {
                 )
               })}
 
-              {/* Tours (Juste des marqueurs visuels) */}
+              {/* Tours */}
               {showBossTowers && bossTowerMarkers.map((point) => (
                 <div 
                   key={point.key} 
@@ -294,7 +301,7 @@ export function LiveMap() {
                 </div>
               ))}
 
-              {/* Joueurs Actifs (Pin + Nom réorganisé) */}
+              {/* --- CORRECTION: Joueurs Actifs (Pseudo et pin collés) --- */}
               {showPlayers && mappablePlayers.map((player) => { 
                 const position = toScreenPercent([player.location_x, player.location_y])
                 
@@ -304,9 +311,9 @@ export function LiveMap() {
                     className="absolute z-30 transition-transform duration-200 hover:scale-110 hover:z-40 flex flex-col items-center" 
                     style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} 
                   >
-                    {/* Nom au-dessus du pin */}
-                    <div className="mb-1 flex items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2.5 py-1 shadow-lg backdrop-blur-sm">
-                      <span className="whitespace-nowrap text-xs font-bold text-foreground drop-shadow-sm">
+                    {/* Nom au-dessus du pin avec marge négative pour l'effet collé */}
+                    <div className="-mb-1.5 relative z-10 flex items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2 py-0.5 shadow-lg backdrop-blur-sm">
+                      <span className="whitespace-nowrap text-[11px] font-bold text-foreground drop-shadow-sm leading-tight">
                         {player.name}
                       </span>
                     </div>
@@ -314,7 +321,7 @@ export function LiveMap() {
                     <img 
                       src="/palworld-map/pin-joueur.png" 
                       alt={player.name} 
-                      className="h-10 w-10 select-none object-contain drop-shadow-md" 
+                      className="relative z-0 h-10 w-10 select-none object-contain drop-shadow-md" 
                       draggable={false}
                     />
                   </div>
@@ -370,7 +377,6 @@ export function LiveMap() {
                 </div>
               )}
               
-              {/* Nouveau bouton de Boss indépendant */}
               <Button onClick={() => setIsReportingBoss(true)} className="w-full gap-2 bg-red-600/90 hover:bg-red-600 shadow-lg shadow-red-600/20 transition-all rounded-xl">
                 <SwordsIcon className="h-4 w-4" /> Signaler un Boss vaincu
               </Button>
@@ -400,7 +406,7 @@ export function LiveMap() {
           )}
         </div>
 
-        {/* PANNEAU FLOTTANT DROIT (Joueurs en ligne épuré) */}
+        {/* PANNEAU FLOTTANT DROIT */}
         <div className="absolute right-6 top-6 z-50 flex hidden w-[280px] flex-col lg:flex max-h-[calc(100%-3rem)] pointer-events-none">
           <Card className="pointer-events-auto flex flex-col border-white/10 bg-background/60 text-foreground shadow-2xl backdrop-blur-xl rounded-2xl max-h-full">
             <div className="p-5 border-b border-white/10 flex items-center justify-between">
@@ -480,6 +486,9 @@ export function LiveMap() {
                 onChange={e => setBossFormName(e.target.value)} 
                 placeholder="Ex: Jetragon, Blazamut..." 
                 autoFocus 
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') markBossDefeated()
+                }}
               />
 
               <div className="flex gap-3 justify-end pt-4 border-t border-white/10">
