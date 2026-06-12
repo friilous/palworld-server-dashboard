@@ -21,36 +21,22 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
-// Ces constantes correspondent à la projection standard utilisée par la communauté Palworld
-const SCALE = 462.962962963;
-const OFFSET_X = 157664.55791065;
-const OFFSET_Y = 123467.1611767;
-
 function toMapPosition([worldX, worldY]: [number, number]): [number, number] {
-  // Calcul basé sur le code que tu as récupéré
-  const x_loc = (worldY - OFFSET_X) / SCALE;
-  const y_loc = (worldX + OFFSET_Y) / SCALE;
-  return [x_loc, y_loc];
+  if (worldX >= -256 && worldX <= 256) return [worldX, worldY]
+  const x = -256 + (256 * (worldX - LANDSCAPE[2])) / (LANDSCAPE[0] - LANDSCAPE[2])
+  const y = (256 * (worldY - LANDSCAPE[3])) / (LANDSCAPE[1] - LANDSCAPE[3])
+  return [x, y]
 }
 
 function fromMapPosition([mapX, mapY]: [number, number]): [string, string] {
-  // Pour retrouver les coordonnées réelles du jeu depuis la souris
-  const worldX = (mapY * SCALE) - OFFSET_Y;
-  const worldY = (mapX * SCALE) + OFFSET_X;
-  return [worldX.toFixed(1), worldY.toFixed(1)];
+  const worldX = ((mapX + 256) * (LANDSCAPE[0] - LANDSCAPE[2])) / 256 + LANDSCAPE[2]
+  const worldY = (mapY * (LANDSCAPE[1] - LANDSCAPE[3])) / 256 + LANDSCAPE[3]
+  return [worldX.toFixed(2), worldY.toFixed(2)]
 }
 
 function toScreenPercent(position: [number, number]) {
-  const [mapX, mapY] = toMapPosition(position);
-  
-  // Si tes points apparaissent mais sont décalés, c'est ici que ça se joue.
-  // La plage de coordonnées Palworld réelle est d'environ -800 à +800.
-  // Pour ton image 4096px, on va utiliser une plage de 1600 unités.
-  
-  return { 
-    left: `${((mapX + 800) / 1600) * 100}%`, 
-    top: `${((800 - mapY) / 1600) * 100}%` 
-  };
+  const [mapX, mapY] = toMapPosition(position)
+  return { left: `${(mapY / 256) * 100}%`, top: `${(-mapX / 256) * 100}%` }
 }
 
 function ControlRow({ label, checked, onCheckedChange }: { label: string, checked: boolean, onCheckedChange: (checked: boolean) => void }) {
