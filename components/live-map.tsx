@@ -135,10 +135,10 @@ export function LiveMap() {
   const broadcastToChat = async (message: string) => {
     console.log("Envoi au chat du serveur :", message)
     try {
-      await fetch('/api/announce', { 
-        method: 'POST', 
+      await fetch('/api/announce', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message })
+        body: JSON.stringify({ message: message }) // Avec la clé 'message'
       })
     } catch (e) {
       console.error("Erreur d'envoi du message chat", e)
