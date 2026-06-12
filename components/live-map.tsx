@@ -382,9 +382,9 @@ export function LiveMap() {
                               return (
                                 <div key={base.id} className="absolute z-20 cursor-pointer group" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
                                   
-                                  {/* Indicateur de présence */}
+                                  {/* Indicateur de présence (Passé au-dessus avec un z-50) */}
                                   {isActive && (
-                                    <div className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/90 backdrop-blur-md px-2 py-1 rounded-md border border-green-500/50 shadow-lg z-10 pointer-events-none whitespace-nowrap">
+                                    <div className="absolute z-50 bottom-full mb-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/90 backdrop-blur-md px-2 py-1 rounded-md border border-green-500/50 shadow-2xl whitespace-nowrap pointer-events-none">
                                       <div className="flex gap-[2px] items-end h-2">
                                         <div className="w-[2px] h-full bg-green-400 animate-[bounce_1s_infinite]" />
                                         <div className="w-[2px] h-[60%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '150ms' }} />
@@ -395,21 +395,29 @@ export function LiveMap() {
                                     </div>
                                   )}
 
-                                  {/* AURA PLUS PETITE ET PLUS VISIBLE */}
+                                  {/* AURA RONDE ET VISIBLE */}
                                   {isActive && (
                                     <div 
-                                      className="absolute top-0 left-1/2 -translate-x-1/2 rounded-full bg-green-500/30 animate-pulse" 
+                                      className="absolute z-0 top-0 left-1/2 -translate-x-1/2 rounded-full animate-pulse" 
                                       style={{ 
-                                        width: isMain ? '50px' : '30px',  // Réduit de 50%
-                                        height: isMain ? '50px' : '30px', // Réduit de 50%
-                                        marginTop: '-25px',               // Ajusté pour rester centré
-                                        boxShadow: '0 0 15px 5px rgba(34, 197, 94, 0.6)' // Plus visible (+50% opacité)
+                                        width: isMain ? '50px' : '30px', 
+                                        height: isMain ? '50px' : '30px',
+                                        marginTop: isMain ? '-25px' : '-15px',
+                                        // On utilise un box-shadow très large et diffus pour éviter l'effet "bloc"
+                                        // L'astuce est de mettre la couleur dans le box-shadow plutôt que dans le background
+                                        boxShadow: '0 0 25px 15px rgba(34, 197, 94, 0.5)',
+                                        backgroundColor: 'rgba(34, 197, 94, 0.2)'
                                       }}
                                     />
                                   )}
 
-                                  <img src="/palworld-map/pin-base.png" alt="Base" className={`relative z-10 drop-shadow-xl transition-transform duration-300 group-hover:scale-125 object-contain -translate-y-1/2 ${isMain ? "h-14 w-14" : "h-8 w-8"}`} draggable={false} />
-
+                                  {/* Le Pin de la base (z-10 pour être sous le texte mais au-dessus de l'aura) */}
+                                  <img 
+                                    src="/palworld-map/pin-base.png" 
+                                    alt="Base" 
+                                    className={`relative z-10 drop-shadow-xl transition-transform duration-300 group-hover:scale-125 object-contain -translate-y-1/2 ${isMain ? "h-14 w-14" : "h-8 w-8"}`} 
+                                    draggable={false} 
+                                  />
                                   {/* L'étiquette (Tooltip) au survol */}
                                   <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 pointer-events-none rounded-md bg-black/85 px-3 py-1.5 shadow-lg backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-30 flex flex-col items-center w-max">
                                     <span className="text-xs font-bold text-white flex items-center gap-1.5">
