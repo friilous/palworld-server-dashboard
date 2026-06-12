@@ -377,21 +377,22 @@ export function LiveMap() {
                 return (
                   <div key={base.id} className="absolute z-20 cursor-pointer group" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
                     
-                    {/* L'onde de choc derrière la base */}
-                    {base.players && base.players.length > 0 && (
-                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-14 w-14 rounded-full bg-green-500/20 animate-ping z-0 pointer-events-none" />
-                    )}
+                  {/* L'indicateur Hologramme Ultra-Compact */}
+                  {base.players && base.players.length > 0 && (
+                    <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded-[3px] border-b border-green-400 shadow-md z-10 pointer-events-none transition-transform group-hover:-translate-y-1">
+                      {/* Mini égaliseur réduit */}
+                      <div className="flex gap-[1px] items-end h-1.5">
+                        <div className="w-[1.5px] h-full bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '0ms' }} />
+                        <div className="w-[1.5px] h-[60%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '150ms' }} />
+                        <div className="w-[1.5px] h-[80%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '300ms' }} />
+                      </div>
+                      <span className="text-[7px] font-bold text-green-400 tracking-wider uppercase leading-none">
+                        {base.players.length}
+                      </span>
+                    </div>
+                  )}
 
                     <img src="/palworld-map/pin-base.png" alt="Base" className={`drop-shadow-xl transition-transform duration-300 group-hover:scale-125 object-contain -translate-y-1/2 ${isMain ? "h-14 w-14" : "h-8 w-8"}`} draggable={false} />
-
-
-                    {/* Le mini badge de notification sur le coin supérieur droit */}
-                    {base.players && base.players.length > 0 && (
-                      <div className="absolute -top-2 -right-2 bg-green-500 text-black text-[10px] font-black h-5 w-5 flex items-center justify-center rounded-full shadow-[0_0_10px_rgba(34,197,94,0.6)] border-[1.5px] border-[#1e2329] z-10 pointer-events-none transition-transform group-hover:scale-110">
-                        {base.players.length}
-                      </div>
-                    )}
-
 
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 pointer-events-none rounded-md bg-black/85 px-3 py-1.5 shadow-lg backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-30 flex flex-col items-center w-max">
                       <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -423,7 +424,13 @@ export function LiveMap() {
                 const isGroup = cluster.players.length > 1
                 
                 return (
-                  <div key={cluster.id} className="absolute z-30 flex flex-col items-center group pointer-events-auto" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
+                  <div key={cluster.id} 
+      className="absolute z-30 flex flex-col items-center group pointer-events-auto" 
+      style={{ 
+        ...position, 
+        transform: `translate(-50%, -50%) scale(${1 / scale})`,
+        transition: 'left 5s linear, top 5s linear' 
+      }}>
                     
                     {/* NOUVEAU : Le nom grossit en même temps grâce au group-hover:scale-110 */}
                     <div className="absolute bottom-full mb-1 pointer-events-none z-10 flex flex-col items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2 py-1 shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">

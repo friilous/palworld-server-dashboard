@@ -76,10 +76,11 @@ export function OnlinePlayersPanel() {
   }, [apiCall, setPlayers])
 
   useEffect(() => {
-    fetchAndMergePlayers()
-    const interval = setInterval(() => fetchAndMergePlayers(), refreshRate * 60 * 1000)
-    return () => clearInterval(interval)
-  }, [fetchAndMergePlayers, refreshRate])
+      fetchAndMergePlayers()
+      // On retire le "* 60" pour que le refreshRate soit en secondes
+      const interval = setInterval(() => fetchAndMergePlayers(), refreshRate * 1000)
+      return () => clearInterval(interval)
+    }, [fetchAndMergePlayers, refreshRate])
 
   const handlePlayerClick = (player: any) => {
     // Ne centre la map que si on a des coordonnées (X, Y non nuls)
