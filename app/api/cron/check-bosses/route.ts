@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   if (expiredTimers && expiredTimers.length > 0) {
     for (const timer of expiredTimers) {
       // Envoi du message au serveur Palworld via la bonne URL (avec /v1/api/)
-      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL.replace(/\/$/, '')}/api/palworld/announce`, {
+      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL!.replace(/\/$/, '')}/api/palworld/announce`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
