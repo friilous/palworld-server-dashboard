@@ -105,6 +105,23 @@ async function proxyPalworldRequest(request: NextRequest, { params }: RouteConte
   // Plus besoin de passer "request" à getServerConfig
   const serverConfig = getServerConfig()
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
   if (!serverConfig) {
     return NextResponse.json({ error: 'Missing server configuration in .env file' }, { status: 400 })
   }
@@ -115,10 +132,21 @@ async function proxyPalworldRequest(request: NextRequest, { params }: RouteConte
     return NextResponse.json({ error: 'Invalid server host or REST API port' }, { status: 400 })
   }
 
-  const { path } = await params
+const { path } = await params
   const upstreamPath = path.map((segment) => encodeURIComponent(segment)).join('/')
   const upstreamUrl = new URL(`/v1/api/${upstreamPath}`, upstreamBaseUrl)
-  const body = method === 'POST' ? await getUpstreamRequestBody(request) : undefined
+  
+  // 1. On utilise 'let' au lieu de 'const' pour pouvoir modifier le body
+  let body = method === 'POST' ? await getUpstreamRequestBody(request) : undefined
+
+  // 2. On affiche ce que ton frontend a réellement envoyé
+  console.log("Body reçu par le proxy Next.js :", body)
+  
+  // 3. On force un message propre si c'est une annonce, pour esquiver les bugs d'encodage
+  if (method === 'POST' && upstreamPath === 'announce') {
+    body = JSON.stringify({ message: "TestDepuisProxy" })
+    console.log("Body forcé envoyé à Palworld :", body)
+  }
 
   try {
     const response = await fetch(upstreamUrl, {
