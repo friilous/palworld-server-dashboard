@@ -12,8 +12,8 @@ import points from '@/lib/map-points.json'
 import { supabase } from '@/lib/supabase'
 
 
-const BASE_RADIUS = 8000; 
-const PLAYER_CLUSTER_RADIUS = 5000;
+const BASE_RADIUS = 10000; 
+const PLAYER_CLUSTER_RADIUS = 8000;
 
 
 const LANDSCAPE = [447900, 708920, -999940, -738920] as const
@@ -306,7 +306,30 @@ export function LiveMap() {
 
   const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
     event.preventDefault()
-    setZoom((current) => clamp(current + (event.deltaY < 0 ? 1 : -1), MIN_ZOOM, MAX_ZOOM))
+    
+    setZoom((currentZoom) => {
+      // 1. Calcul du nouveau zoom
+      const newZoom = clamp(currentZoom + (event.deltaY < 0 ? 1 : -1), MIN_ZOOM, MAX_ZOOM)
+      if (newZoom === currentZoom) return currentZoom // On ne fait rien si on est déjà au max/min
+
+      // 2. Calcul du ratio de changement d'échelle
+      const oldScale = 1 + currentZoom * 0.45
+      const newScale = 1 + newZoom * 0.45
+      const ratio = newScale / oldScale
+
+      // 3. Position de la souris par rapport au centre du conteneur
+      const rect = event.currentTarget.getBoundingClientRect()
+      const mouseX = event.clientX - rect.left - rect.width / 2
+      const mouseY = event.clientY - rect.top - rect.height / 2
+
+      // 4. Ajustement du Pan pour garder le point sous la souris au même endroit
+      setPan((prevPan) => ({
+        x: mouseX - (mouseX - prevPan.x) * ratio,
+        y: mouseY - (mouseY - prevPan.y) * ratio
+      }))
+
+      return newZoom
+    })
   }, [])
 
   const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -353,18 +376,27 @@ export function LiveMap() {
                 const isMain = base.base_type === 'main'
                 return (
                   <div key={base.id} className="absolute z-20 cursor-pointer group" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
+                    
+                    {/* NOUVEAU : Indicateur permanent s'il y a des joueurs */}
+                    {base.players && base.players.length > 0 && (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 bg-green-500/90 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg border border-white/20 pointer-events-none z-10 transition-transform group-hover:-translate-y-2">
+                        {/* Petit point blanc qui clignote */}
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
+                        </span>
+                        {base.players.length}
+                      </div>
+                    )}
+
                     <img src="/palworld-map/pin-base.png" alt="Base" className={`drop-shadow-xl transition-transform duration-300 group-hover:scale-125 object-contain -translate-y-1/2 ${isMain ? "h-14 w-14" : "h-8 w-8"}`} draggable={false} />
 
-                    {/* Le conteneur du texte est maintenant en flex-col */}
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 pointer-events-none rounded-md bg-black/85 px-3 py-1.5 shadow-lg backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-30 flex flex-col items-center w-max">
-                      
-                      {/* Ligne 1 : Nom + Statut */}
                       <span className="text-xs font-bold text-white flex items-center gap-1.5">
                         {base.player_name}
                         <span className="text-gray-400 text-[10px] font-normal">({isMain ? 'Principale' : 'Secondaire'})</span>
                       </span>
                       
-                      {/* Ligne 2 (Optionnelle) : Joueurs à l'intérieur */}
                       {base.players && base.players.length > 0 && (
                         <div className="mt-1 pt-1 border-t border-white/10 w-full flex flex-col items-center">
                           <span className="text-[10px] text-green-400 font-semibold mb-0.5">🟢 {base.players.length} Joueur(s) dans la base</span>
@@ -372,7 +404,6 @@ export function LiveMap() {
                         </div>
                       )}
                       
-                      {/* Ligne 3 : L'aide à la suppression */}
                       <span className="mt-1.5 text-[9px] text-red-400 font-normal italic">(Double-clic pour suppr.)</span>
                     </div>
                   </div>
@@ -437,27 +468,6 @@ export function LiveMap() {
               <ControlRow label="Afficher les joueurs" checked={showPlayers} onCheckedChange={setShowPlayers} />
             </div>
 
-            {/* --- BLOC TEMPORAIRE DE CALIBRAGE --- */}
-            <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-xl mb-4 space-y-2">
-              <h4 className="text-yellow-500 text-xs font-bold flex items-center gap-1">
-                <CrosshairIcon className="h-3 w-3" /> Calibrage Map (Temp)
-              </h4>
-              <p className="text-xs font-mono text-muted-foreground">
-                Curseur : <span className="text-foreground">{mousePosition[0]}, {mousePosition[1]}</span>
-              </p>
-              <div className="h-px w-full bg-white/5 my-1" />
-              <p className="text-[10px] uppercase text-muted-foreground mb-1">Positions réelles des joueurs (API) :</p>
-              <div className="max-h-24 overflow-y-auto space-y-1 custom-scrollbar pr-1">
-                {mappablePlayers.length === 0 && <span className="text-xs italic text-muted-foreground">Aucun joueur en ligne</span>}
-                {mappablePlayers.map(p => (
-                  <div key={p.name} className="flex justify-between text-xs font-mono">
-                    <span className="truncate max-w-[80px]">{p.name}</span>
-                    <span className="text-primary">{p.location_x.toFixed(0)}, {p.location_y.toFixed(0)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* ------------------------------------- */}
             
             <div className="space-y-3">
               <Button onClick={() => setIsAddingBase(true)} disabled={isAddingBase} className="w-full gap-2 bg-primary/90 hover:bg-primary shadow-lg shadow-primary/20 transition-all rounded-xl disabled:opacity-50">
