@@ -13,6 +13,7 @@ export async function GET(request: Request) {
     return new NextResponse('Non autorisé', { status: 401 })
   }
 
+  
   const now = new Date().toISOString()
   
   const { data: expiredTimers } = await supabase
