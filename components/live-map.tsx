@@ -12,7 +12,7 @@ import points from '@/lib/map-points.json'
 import { supabase } from '@/lib/supabase'
 
 
-const BASE_RADIUS = 10000; 
+const BASE_RADIUS = 5000; 
 const PLAYER_CLUSTER_RADIUS = 8000;
 
 
