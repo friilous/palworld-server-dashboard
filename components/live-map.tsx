@@ -190,7 +190,7 @@ export function LiveMap() {
       if (error) console.error("Erreur d'enregistrement Supabase :", error)
 
       // 3. Envoi du message RCON
-      broadcastToChat(`⚔️ Le boss ${bossName} vient d'etre vaincu ! Reapparition dans 60 minutes.`)
+      broadcastToChat(`Le boss ${bossName} est vaincu. Respawn dans 1h !`)
     }
 
   useEffect(() => {
