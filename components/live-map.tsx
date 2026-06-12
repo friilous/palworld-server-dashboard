@@ -23,14 +23,14 @@ function clamp(value: number, min: number, max: number) {
 
 // Ces constantes correspondent à la projection standard utilisée par la communauté Palworld
 const SCALE = 462.962962963;
-const OFFSET_X = 157664.55791065; // Correspond à la conversion X
-const OFFSET_Y = 123467.1611767;  // Correspond à la conversion Y
+const OFFSET_X = 157664.55791065;
+const OFFSET_Y = 123467.1611767;
 
 function toMapPosition([worldX, worldY]: [number, number]): [number, number] {
-  // Inversion de la logique du projet pour matcher ton affichage web
-  const mapX = (worldY - OFFSET_X) / SCALE;
-  const mapY = (worldX + OFFSET_Y) / SCALE;
-  return [mapX, mapY];
+  // Calcul basé sur le code que tu as récupéré
+  const x_loc = (worldY - OFFSET_X) / SCALE;
+  const y_loc = (worldX + OFFSET_Y) / SCALE;
+  return [x_loc, y_loc];
 }
 
 function fromMapPosition([mapX, mapY]: [number, number]): [string, string] {
@@ -42,12 +42,15 @@ function fromMapPosition([mapX, mapY]: [number, number]): [string, string] {
 
 function toScreenPercent(position: [number, number]) {
   const [mapX, mapY] = toMapPosition(position);
-  // Le code que tu as trouvé utilise une échelle de -1000 à 1000 pour 2000 unités
-  // Si ton image est en 256x256, il faut adapter :
+  
+  // Si tes points apparaissent mais sont décalés, c'est ici que ça se joue.
+  // La plage de coordonnées Palworld réelle est d'environ -800 à +800.
+  // Pour ton image 4096px, on va utiliser une plage de 1600 unités.
+  
   return { 
-    left: `${((mapX + 1000) / 2000) * 100}%`, 
-    top: `${((1000 - mapY) / 2000) * 100}%` 
-  }
+    left: `${((mapX + 800) / 1600) * 100}%`, 
+    top: `${((800 - mapY) / 1600) * 100}%` 
+  };
 }
 
 function ControlRow({ label, checked, onCheckedChange }: { label: string, checked: boolean, onCheckedChange: (checked: boolean) => void }) {
