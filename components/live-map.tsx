@@ -74,7 +74,7 @@ export function LiveMap() {
   
   const [zoom, setZoom] = useState(2)
   const [pan, setPan] = useState({ x: 0, y: 0 })
-  const [, setMousePosition] = useState<[string, string]>(['0.00', '0.00'])
+  const [mousePosition, setMousePosition] = useState<[string, string]>(['0.00', '0.00'])
   
   const [showPlayers, setShowPlayers] = useState(true)
   const [showBossTowers, setShowBossTowers] = useState(false)
@@ -127,25 +127,22 @@ export function LiveMap() {
     return () => { supabase.removeChannel(channel) }
   }, [fetchData])
 
-  // --- Nettoyage automatique des timers expirés ---
   useEffect(() => {
     const interval = setInterval(() => {
       setBossTimers(currentTimers => currentTimers.filter(t => new Date(t.respawn_time) > new Date()))
-    }, 60000) // Vérifie chaque minute
+    }, 60000)
     return () => clearInterval(interval)
   }, [])
 
-  // --- Écoute le centrage depuis le panneau des joueurs ---
   useEffect(() => {
     const handleCenterMap = (e: Event) => {
       const customEvent = e as CustomEvent
       const { x, y } = customEvent.detail
       if (x !== undefined && y !== undefined) {
         const [mapX, mapY] = toMapPosition([x, y])
-        // Convert mapX/Y to pixels based on our 1024x1024 map at current scale
         const targetPanX = -((mapY / 256) * 512)
         const targetPanY = ((mapX / 256) * 512)
-        setZoom(4) // Zoom automatique
+        setZoom(4)
         setPan({ x: targetPanX, y: targetPanY })
       }
     }
@@ -153,7 +150,6 @@ export function LiveMap() {
     return () => window.removeEventListener('palworld:center_map', handleCenterMap)
   }, [])
 
-  // --- Support Echap pour annuler la pose de base ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isAddingBase) {
@@ -220,6 +216,20 @@ export function LiveMap() {
     broadcastToChat(`>>>>> ${bossName} est vaincu. Respawn prévu à ${heureParis} <<<<<`)
   }
 
+  // --- NOUVEAU : Suivi de la souris pour le calibrage ---
+  const handleMouseMoveOnMap = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const planeRect = mapPlaneRef.current?.getBoundingClientRect()
+    if (!planeRect) return
+    const leftRatio = clamp((event.clientX - planeRect.left) / planeRect.width, 0, 1)
+    const topRatio = clamp((event.clientY - planeRect.top) / planeRect.height, 0, 1)
+    
+    const mapX = -topRatio * 256
+    const mapY = leftRatio * 256
+    
+    const [worldX, worldY] = fromMapPosition([mapX, mapY])
+    setMousePosition([worldX, worldY])
+  }, [])
+
   useEffect(() => {
     if (!isDragging) return
     const handleMouseMove = (event: MouseEvent) => {
@@ -227,8 +237,6 @@ export function LiveMap() {
       if (!start) return
       const newX = start.panX + (event.clientX - start.x)
       const newY = start.panY + (event.clientY - start.y)
-      
-      // Modification Directe du DOM (0 Lag)
       if (mapPlaneRef.current) {
         mapPlaneRef.current.style.transform = `translate(-50%, -50%) translate(${newX}px, ${newY}px) scale(${scale})`
       }
@@ -278,19 +286,18 @@ export function LiveMap() {
     <>
       <div className="flex flex-col h-[calc(100vh-4rem)] w-full overflow-hidden bg-background text-foreground relative font-sans">
         
-        {/* Indication visuelle si placement de base en cours */}
         {isAddingBase && !newBaseCoords && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-blue-600 text-white px-6 py-2 rounded-full font-bold shadow-lg animate-pulse border border-blue-400">
             🖱️ Clic droit pour poser la base — (Echap pour annuler)
           </div>
         )}
 
-        {/* Zone Principale de la Carte */}
         <div className="relative flex-1 w-full h-full overflow-hidden bg-[#1e2329]">
           <div
             className={`relative h-full w-full overflow-hidden ${isAddingBase && !newBaseCoords ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
             style={{ overscrollBehavior: 'contain' }}
             onMouseDown={handleMouseDown} onMouseUp={handleMapClick} onWheel={handleWheel}
+            onMouseMove={handleMouseMoveOnMap} /* <-- Ajout du suivi de la souris ici */
             onContextMenu={(e) => { if (isAddingBase) e.preventDefault() }}
           >
             <div
@@ -299,28 +306,17 @@ export function LiveMap() {
             >
               <img src={MAP_IMAGE_URL} alt="Carte du monde Palworld" className="block h-full w-full select-none" draggable={false} />
 
-              {/* Fast Travels */}
               {showFastTravels && fastTravelMarkers.map((marker) => (
-                <div 
-                  key={marker.key} 
-                  className="absolute z-10 flex items-center justify-center transition-transform hover:scale-110" 
-                  style={{ ...marker.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
-                >
+                <div key={marker.key} className="absolute z-10 flex items-center justify-center transition-transform hover:scale-110" style={{ ...marker.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
                   <img src="/palworld-map/fast_travel.webp" alt="Fast Travel" className="h-6 w-6 object-contain drop-shadow-md" draggable={false} />
                 </div>
               ))}
 
-              {/* Bases des Joueurs */}
               {showBases && bases.map((base) => {
                 const position = toScreenPercent([base.location_x, base.location_y])
                 const isMain = base.base_type === 'main'
                 return (
-                  <div 
-                    key={base.id} 
-                    className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group" 
-                    style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
-                    onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}
-                  >
+                  <div key={base.id} className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
                     <img src="/palworld-map/pin-base.png" alt="Base" className={`drop-shadow-xl transition-all duration-300 group-hover:scale-125 object-contain ${isMain ? "h-14 w-14" : "h-8 w-8"}`} style={{ filter: `drop-shadow(0px 0px 8px ${base.color_hex || '#3b82f6'})` }} draggable={false} />
                     <span className="mt-1 whitespace-nowrap rounded-md bg-black/85 px-2.5 py-1 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-lg backdrop-blur-sm border border-white/10 flex items-center gap-1">
                       {base.player_name} <span className="text-[9px] text-red-400 font-normal italic">(Double-clic pour suppr.)</span>
@@ -329,42 +325,20 @@ export function LiveMap() {
                 )
               })}
 
-              {/* Tours */}
               {showBossTowers && bossTowerMarkers.map((point) => (
-                <div 
-                  key={point.key} 
-                  className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group" 
-                  style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
-                >
-                  <img 
-                    src="/palworld-map/boss_tower.webp" 
-                    alt="Tour" 
-                    className="h-10 w-10 select-none object-contain transition-transform group-hover:scale-110 drop-shadow-xl" 
-                    draggable={false} 
-                  />
+                <div key={point.key} className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
+                  <img src="/palworld-map/boss_tower.webp" alt="Tour" className="h-10 w-10 select-none object-contain transition-transform group-hover:scale-110 drop-shadow-xl" draggable={false} />
                 </div>
               ))}
 
-              {/* Joueurs Actifs */}
               {showPlayers && mappablePlayers.map((player) => { 
                 const position = toScreenPercent([player.location_x, player.location_y])
                 return (
-                  <div 
-                    key={getPlayerKey(player)} 
-                    className="absolute z-30 transition-transform duration-200 hover:scale-110 hover:z-40 flex flex-col items-center animate-in fade-in" 
-                    style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
-                  >
+                  <div key={getPlayerKey(player)} className="absolute z-30 transition-transform duration-200 hover:scale-110 hover:z-40 flex flex-col items-center animate-in fade-in" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
                     <div className="-mb-1.5 relative z-10 flex items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2 py-0.5 shadow-lg backdrop-blur-sm">
-                      <span className="whitespace-nowrap text-[11px] font-bold text-foreground drop-shadow-sm leading-tight">
-                        {player.name}
-                      </span>
+                      <span className="whitespace-nowrap text-[11px] font-bold text-foreground drop-shadow-sm leading-tight">{player.name}</span>
                     </div>
-                    <img 
-                      src="/palworld-map/pin-joueur.png" 
-                      alt={player.name} 
-                      className="relative z-0 h-10 w-10 select-none object-contain drop-shadow-md" 
-                      draggable={false}
-                    />
+                    <img src="/palworld-map/pin-joueur.png" alt={player.name} className="relative z-0 h-10 w-10 select-none object-contain drop-shadow-md" draggable={false} />
                   </div>
                 )
               })}
@@ -372,37 +346,51 @@ export function LiveMap() {
           </div>
         </div>
 
-        {/* CONTROLES FLOTTANTS (ZOOM) */}
         <div className="absolute bottom-6 right-6 z-50 flex flex-col gap-2">
           <Card className="bg-background/70 backdrop-blur-xl border-white/10 shadow-2xl overflow-hidden flex flex-col">
-            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-none hover:bg-white/10" onClick={() => setZoom(z => clamp(z + 1, MIN_ZOOM, MAX_ZOOM))}>
-              <ZoomInIcon className="h-5 w-5" />
-            </Button>
+            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-none hover:bg-white/10" onClick={() => setZoom(z => clamp(z + 1, MIN_ZOOM, MAX_ZOOM))}><ZoomInIcon className="h-5 w-5" /></Button>
             <div className="h-[1px] w-full bg-border/50" />
-            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-none hover:bg-white/10" onClick={() => setZoom(z => clamp(z - 1, MIN_ZOOM, MAX_ZOOM))}>
-              <ZoomOutIcon className="h-5 w-5" />
-            </Button>
+            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-none hover:bg-white/10" onClick={() => setZoom(z => clamp(z - 1, MIN_ZOOM, MAX_ZOOM))}><ZoomOutIcon className="h-5 w-5" /></Button>
             <div className="h-[1px] w-full bg-border/50" />
-            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-none hover:bg-white/10" onClick={() => { setZoom(2); setPan({x:0, y:0}) }}>
-              <CrosshairIcon className="h-4 w-4" />
-            </Button>
+            <Button variant="ghost" size="icon" className="h-10 w-10 rounded-none hover:bg-white/10" onClick={() => { setZoom(2); setPan({x:0, y:0}) }}><CrosshairIcon className="h-4 w-4" /></Button>
           </Card>
         </div>
 
-        {/* PANNEAU FLOTTANT GAUCHE */}
         <div className="absolute left-6 top-6 z-50 flex hidden w-[320px] flex-col gap-6 lg:flex max-h-[calc(100%-3rem)] overflow-y-auto pointer-events-none custom-scrollbar">
           <Card className="pointer-events-auto border-white/10 bg-background/60 p-5 text-foreground shadow-2xl backdrop-blur-xl rounded-2xl">
             <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
               <MapPinIcon className="h-5 w-5 text-primary" /> Filtres de Carte
             </h3>
-            <div className="space-y-2 rounded-xl border border-white/5 bg-black/20 p-4">
+            <div className="space-y-2 rounded-xl border border-white/5 bg-black/20 p-4 mb-4">
               <ControlRow label="Bases des joueurs" checked={showBases} onCheckedChange={setShowBases} />
               <ControlRow label="Tours" checked={showBossTowers} onCheckedChange={setShowBossTowers} />
               <ControlRow label="Points de téléportation" checked={showFastTravels} onCheckedChange={setShowFastTravels} />
               <ControlRow label="Afficher les joueurs" checked={showPlayers} onCheckedChange={setShowPlayers} />
             </div>
+
+            {/* --- BLOC TEMPORAIRE DE CALIBRAGE --- */}
+            <div className="bg-yellow-500/10 border border-yellow-500/30 p-3 rounded-xl mb-4 space-y-2">
+              <h4 className="text-yellow-500 text-xs font-bold flex items-center gap-1">
+                <CrosshairIcon className="h-3 w-3" /> Calibrage Map (Temp)
+              </h4>
+              <p className="text-xs font-mono text-muted-foreground">
+                Curseur : <span className="text-foreground">{mousePosition[0]}, {mousePosition[1]}</span>
+              </p>
+              <div className="h-px w-full bg-white/5 my-1" />
+              <p className="text-[10px] uppercase text-muted-foreground mb-1">Positions réelles des joueurs (API) :</p>
+              <div className="max-h-24 overflow-y-auto space-y-1 custom-scrollbar pr-1">
+                {mappablePlayers.length === 0 && <span className="text-xs italic text-muted-foreground">Aucun joueur en ligne</span>}
+                {mappablePlayers.map(p => (
+                  <div key={p.name} className="flex justify-between text-xs font-mono">
+                    <span className="truncate max-w-[80px]">{p.name}</span>
+                    <span className="text-primary">{p.location_x.toFixed(0)}, {p.location_y.toFixed(0)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* ------------------------------------- */}
             
-            <div className="mt-5 space-y-3">
+            <div className="space-y-3">
               <Button onClick={() => setIsAddingBase(true)} disabled={isAddingBase} className="w-full gap-2 bg-primary/90 hover:bg-primary shadow-lg shadow-primary/20 transition-all rounded-xl disabled:opacity-50">
                 <MapPinIcon className="h-4 w-4" /> {isAddingBase ? 'Placement en cours...' : 'Signaler ma base'}
               </Button>
@@ -412,7 +400,6 @@ export function LiveMap() {
             </div>
           </Card>
 
-          {/* BOSS EN COOLDOWN */}
           {activeBossTimers.length > 0 && (
             <Card className="pointer-events-auto border-white/10 bg-background/60 p-0 text-foreground shadow-2xl backdrop-blur-xl rounded-2xl overflow-hidden flex flex-col">
               <div className="p-4 border-b border-white/10 bg-gradient-to-r from-red-900/20 to-transparent flex items-center justify-between">
@@ -441,7 +428,6 @@ export function LiveMap() {
         </div>
       </div>
 
-      {/* MODAL NOUVELLE BASE */}
       {newBaseCoords && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
           <Card className="w-full max-w-sm p-6 shadow-2xl border-white/10 bg-background/90 backdrop-blur-xl rounded-2xl">
@@ -465,7 +451,6 @@ export function LiveMap() {
         </div>
       )}
 
-      {/* MODAL DU FORMULAIRE DE BOSS */}
       {isReportingBoss && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
           <Card className="w-full max-w-sm p-6 shadow-2xl border-red-500/30 bg-background/90 backdrop-blur-xl rounded-2xl">
