@@ -305,15 +305,14 @@ export function LiveMap() {
   }, [isAddingBase])
 
   const handleWheel = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    event.preventDefault()
-    
-    setZoom((currentZoom) => {
-      // 1. Calcul du nouveau zoom
-      const newZoom = clamp(currentZoom + (event.deltaY < 0 ? 1 : -1), MIN_ZOOM, MAX_ZOOM)
-      if (newZoom === currentZoom) return currentZoom // On ne fait rien si on est déjà au max/min
+      event.preventDefault()
+      
+      // 1. Calcul du nouveau zoom basé sur le zoom actuel (plus de fonction imbriquée)
+      const newZoom = clamp(zoom + (event.deltaY < 0 ? 1 : -1), MIN_ZOOM, MAX_ZOOM)
+      if (newZoom === zoom) return // On ne fait rien si on est déjà au max/min
 
       // 2. Calcul du ratio de changement d'échelle
-      const oldScale = 1 + currentZoom * 0.45
+      const oldScale = 1 + zoom * 0.45
       const newScale = 1 + newZoom * 0.45
       const ratio = newScale / oldScale
 
@@ -322,15 +321,16 @@ export function LiveMap() {
       const mouseX = event.clientX - rect.left - rect.width / 2
       const mouseY = event.clientY - rect.top - rect.height / 2
 
-      // 4. Ajustement du Pan pour garder le point sous la souris au même endroit
-      setPan((prevPan) => ({
-        x: mouseX - (mouseX - prevPan.x) * ratio,
-        y: mouseY - (mouseY - prevPan.y) * ratio
-      }))
+      // 4. Calcul et mise à jour du nouveau Pan
+      setPan({
+        x: mouseX - (mouseX - pan.x) * ratio,
+        y: mouseY - (mouseY - pan.y) * ratio
+      })
 
-      return newZoom
-    })
-  }, [])
+      // 5. Mise à jour du Zoom
+      setZoom(newZoom)
+      
+    }, [zoom, pan]) // Important : on ajoute zoom et pan dans les dépendances
 
   const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 0) return 
