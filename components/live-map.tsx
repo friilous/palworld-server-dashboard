@@ -12,7 +12,6 @@ import type { Player } from '@/lib/types'
 import points from '@/lib/map-points.json'
 import { supabase } from '@/lib/supabase'
 
-
 // --- CONSTANTES ET UTILS ---
 const LANDSCAPE = [447900, 708920, -999940, -738920] as const
 const MAP_IMAGE_URL = '/palworld-map/full-map-z4.png'
@@ -65,6 +64,7 @@ function toScreenPixels(position: [number, number], width: number, height: numbe
   return { x: (mapY / 256) * width, y: (-mapX / 256) * height }
 }
 
+// Fonction RESTAURÉE !
 function ControlRow({ label, checked, onCheckedChange }: { label: string, checked: boolean, onCheckedChange: (checked: boolean) => void }) {
   return (
     <div className="flex items-center justify-between gap-3">
@@ -150,16 +150,6 @@ export function LiveMap() {
 
   const saveBase = async () => {
     if (!newBaseCoords || !formData.name) return
-    
-    console.log("Tentative d'insertion avec :", {
-      player_name: formData.name,
-      guild_name: formData.faction,
-      base_type: formData.type,
-      location_x: newBaseCoords.x,
-      location_y: newBaseCoords.y,
-      color_hex: formData.color
-    });
-
     const { data, error } = await supabase.from('player_bases').insert([{
       player_name: formData.name, 
       guild_name: formData.faction,
@@ -170,13 +160,11 @@ export function LiveMap() {
     }])
 
     if (error) {
-      console.error("Erreur détaillée lors de l'insertion Supabase :", error);
       alert("Erreur lors de la sauvegarde : " + error.message);
     } else {
-      console.log("Succès !");
       setIsAddingBase(false)
       setNewBaseCoords(null)
-      setFormData({ name: '', faction: '', type: 'principale', color: '#3b82f6' })
+      setFormData({ name: '', faction: '', type: 'main', color: '#3b82f6' })
       fetchData()
     }
   }
@@ -252,7 +240,6 @@ export function LiveMap() {
   }, [])
 
   const handleMapClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    // Écoute UNIQUEMENT le clic droit (button 2)
     if (event.button !== 2) return 
     if (!isAddingBase) return
 
@@ -274,7 +261,7 @@ export function LiveMap() {
   }, [])
 
   const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return // On ne drague qu'avec le clic gauche
+    if (event.button !== 0) return 
     event.preventDefault()
     dragStartRef.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y }
     setIsDragging(true)
@@ -333,9 +320,10 @@ export function LiveMap() {
   }
 
   return (
-    <div className="flex h-full w-full flex-col bg-background text-foreground relative">
+    <div className="flex flex-col h-[calc(100vh-4rem)] w-full overflow-hidden bg-background text-foreground relative">
+      
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/60 bg-card/70 p-4 backdrop-blur">
+      <div className="flex shrink-0 flex-wrap items-start justify-between gap-4 border-b border-border/60 bg-card/70 p-4 backdrop-blur z-10">
         <div>
           <div className="flex items-center gap-2 text-lg font-semibold">
             <span>Carte du Maraudeur</span>
@@ -358,19 +346,114 @@ export function LiveMap() {
         </div>
       </div>
 
-      {/* Grid Layout Principal */}
-      <div className="grid flex-1 grid-cols-1 gap-4 p-4 xl:grid-cols-[20rem_minmax(0,1fr)_20rem] lg:grid-cols-[20rem_minmax(0,1fr)]">
+      {/* Zone Principale de la Carte */}
+      <div className="relative flex-1 w-full h-full overflow-hidden">
         
-        {/* COLONNE 1 : Contrôles & Ajout de Base (Gauche) */}
-        <div className="flex flex-col gap-4">
-          <Card className="border-border/60 bg-card/85 p-4 text-foreground shadow-2xl shadow-black/20 backdrop-blur lg:h-fit">
+        {/* CARTE EN ARRIÈRE PLAN */}
+        <div className="absolute inset-0 z-0 bg-background/40">
+          <div
+            className={`relative h-full w-full overflow-hidden ${getCursorStyle()}`}
+            style={{ overscrollBehavior: 'contain' }}
+            onMouseMove={handleMapMouseMove}
+            onMouseDown={handleMouseDown}
+            onMouseUp={handleMapClick}
+            onContextMenu={(e) => { 
+              if (isAddingBase) e.preventDefault() 
+            }}
+            onWheel={handleWheel}
+          >
+            <div
+              ref={mapPlaneRef}
+              className="absolute left-1/2 top-1/2 h-full w-full will-change-transform"
+              style={{ transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${scale})`, transformOrigin: 'center center' }}
+            >
+              <img src={MAP_IMAGE_URL} alt="Carte du monde Palworld" className="block h-full w-full select-none object-cover" draggable={false} onLoad={() => { setMapImageLoaded(true); setMapImageError(false) }} onError={() => { setMapImageLoaded(false); setMapImageError(true) }} />
+
+              {/* Bases des Joueurs */}
+              {showBases && bases.map((base) => {
+                const position = toScreenPercent([base.location_x, base.location_y])
+                const labels: Record<string, string> = {
+                  'main': 'Principale',
+                  'sub_1': 'Secondaire 1',
+                  'sub_2': 'Secondaire 2',
+                  'sub_3': 'Secondaire 3'
+                }
+                const isMain = base.base_type === 'main'
+                const iconSize = isMain ? 24 : 16
+                const label = labels[base.base_type] || base.base_type
+
+                return (
+                  <div
+                    key={base.id}
+                    className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group"
+                    style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
+                  >
+                    <div 
+                      className="drop-shadow-md transition-transform group-hover:scale-110"
+                      style={{ color: base.color_hex || '#3b82f6' }}
+                    >
+                      <HomeIcon size={iconSize} strokeWidth={2.5} />
+                    </div>
+                    <span className="mt-1 whitespace-nowrap rounded bg-black/80 px-2 py-0.5 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border border-white/10">
+                      {base.player_name} <span className="text-gray-400 font-normal">({label})</span>
+                    </span>
+                  </div>
+                )
+              })}
+
+              {/* Marqueurs */}
+              {showFastTravels && fastTravelMarkers.map((point) => (
+                <img key={point.key} src="/palworld-map/fast_travel.webp" alt="Fast Travel" className="absolute z-20 h-7 w-7 select-none object-contain drop-shadow-md" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} draggable={false} />
+              ))}
+              {showBossTowers && bossTowerMarkers.map((point) => (
+                <img key={point.key} src="/palworld-map/boss_tower.webp" alt="Boss Tower" className="absolute z-20 h-8 w-8 select-none object-contain drop-shadow-lg" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} draggable={false} />
+              ))}
+
+              {/* Joueurs Actifs */}
+              {showPlayers && playerGroups.map((group) => {
+                const isHovered = hoveredGroupId === group.id
+                return (
+                  <div key={group.id}>
+                    {group.players.map(({ player, x, y }, index) => {
+                      const offset = getFanoutOffset(index, group.players.length, scale)
+                      return (
+                        <div 
+                          key={getPlayerKey(player)} 
+                          className={`absolute ${isHovered ? 'z-40' : 'z-30'} transition-transform duration-200 hover:scale-110`} 
+                          style={{ left: `${x}px`, top: `${y}px` }} 
+                          onMouseEnter={() => setHoveredGroupId(group.id)}
+                          onMouseLeave={() => setHoveredGroupId(null)}
+                        >
+                          <img 
+                            src="/palworld-map/player.webp" 
+                            alt={player.name} 
+                            className="absolute left-0 top-0 h-10 w-10 -translate-x-1/2 -translate-y-1/2 select-none object-contain drop-shadow-md" 
+                            style={{ transform: `translate(-50%, -50%) scale(${1 / scale})` }}
+                            draggable={false}
+                          />
+                          <div className="absolute left-0 top-0" style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${1 / scale})`, transformOrigin: 'center bottom' }}>
+                            <div className="absolute left-0 top-0 flex items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2.5 py-1 shadow-lg backdrop-blur-sm" style={{ transform: 'translate(-50%, calc(-100% - 20px))' }}>
+                              <span className="whitespace-nowrap text-xs font-bold text-foreground drop-shadow-sm">{player.name}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* PANNEAU FLOTTANT GAUCHE : Contrôles & Bases (Caché sur mobile) */}
+        <div className="absolute left-4 top-4 z-50 flex hidden w-80 flex-col gap-4 lg:flex max-h-[calc(100%-2rem)] overflow-y-auto pointer-events-none">
+          
+          <Card className="pointer-events-auto border-border/60 bg-card/85 p-4 text-foreground shadow-2xl shadow-black/20 backdrop-blur">
             <div className="space-y-4">
               <div className="rounded-xl border border-border/60 bg-muted/35 p-3">
                 <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Niveau de Zoom</div>
                 <div className="mt-1 text-2xl font-semibold">{zoom + 1}x</div>
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {zoom >= 6 ? 'Joueurs dissociés' : 'Le regroupement s\'estompe en zoomant'}
-                </div>
               </div>
 
               <div className="space-y-3 rounded-xl border border-border/60 bg-muted/35 p-4">
@@ -378,11 +461,6 @@ export function LiveMap() {
                 <ControlRow label="Tours de Boss" checked={showBossTowers} onCheckedChange={setShowBossTowers} />
                 <ControlRow label="Afficher les joueurs" checked={showPlayers} onCheckedChange={setShowPlayers} />
                 <ControlRow label="Bases des joueurs" checked={showBases} onCheckedChange={setShowBases} />
-              </div>
-
-              <div className="flex items-center justify-between rounded-xl border border-border/60 bg-muted/35 px-3 py-2 text-sm">
-                <span className="text-muted-foreground">Position GPS</span>
-                <span className="font-mono text-foreground">{mousePosition[0]}, {mousePosition[1]}</span>
               </div>
 
               <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/45 px-3 py-4 shadow-xl">
@@ -399,8 +477,7 @@ export function LiveMap() {
             </div>
           </Card>
 
-          {/* NOUVEAU BLOC : Gestion des Bases */}
-          <Card className="border-border/60 bg-card/85 p-4 text-foreground shadow-2xl shadow-black/20 backdrop-blur">
+          <Card className="pointer-events-auto border-border/60 bg-card/85 p-4 text-foreground shadow-2xl shadow-black/20 backdrop-blur">
             <h3 className="font-semibold text-lg mb-2">Vos Bases</h3>
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
@@ -425,128 +502,35 @@ export function LiveMap() {
           </Card>
         </div>
 
-        {/* COLONNE 2 : Carte (Centre) */}
-        <div className="flex min-w-0 h-full">
-          <div className="relative flex flex-1 w-full min-h-[60vh] items-center justify-center overflow-hidden rounded-2xl border border-border/60 bg-card/40">
-            <div
-              className={`relative aspect-square overflow-hidden rounded-2xl border border-border/60 bg-background/40 shadow-2xl shadow-black/20 ${getCursorStyle()}`}
-              style={{ width: 'min(100%, 920px)', overscrollBehavior: 'contain' }}
-              onMouseMove={handleMapMouseMove}
-              onMouseDown={handleMouseDown}
-              onMouseUp={handleMapClick}
-              onContextMenu={(e) => { 
-                // Empêche le menu contextuel du navigateur de s'ouvrir quand on place une base
-                if (isAddingBase) e.preventDefault() 
-              }}
-              onWheel={handleWheel}
-            >
-              <div
-                ref={mapPlaneRef}
-                className="absolute left-1/2 top-1/2 h-full w-full will-change-transform"
-                style={{ transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${scale})`, transformOrigin: 'center center' }}
-              >
-                <img src={MAP_IMAGE_URL} alt="Carte du monde Palworld" className="block h-full w-full select-none object-cover" draggable={false} onLoad={() => { setMapImageLoaded(true); setMapImageError(false) }} onError={() => { setMapImageLoaded(false); setMapImageError(true) }} />
-
-                {/* Bases des Joueurs */}
-                {showBases && bases.map((base) => {
-                  const position = toScreenPercent([base.location_x, base.location_y])
-                  
-                  // Dictionnaire de traduction pour un affichage propre
-                  const labels: Record<string, string> = {
-                    'main': 'Principale',
-                    'sub_1': 'Secondaire 1',
-                    'sub_2': 'Secondaire 2',
-                    'sub_3': 'Secondaire 3'
-                  }
-
-                  const isMain = base.base_type === 'main'
-                  const iconSize = isMain ? 24 : 16
-                  const label = labels[base.base_type] || base.base_type // Utilise le dictionnaire ou le texte brut par défaut
-
-                  return (
-                    <div
-                      key={base.id}
-                      className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group"
-                      style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
-                    >
-                      <div 
-                        className="drop-shadow-md transition-transform group-hover:scale-110"
-                        style={{ color: base.color_hex || '#3b82f6' }}
-                      >
-                        <HomeIcon size={iconSize} strokeWidth={2.5} />
-                      </div>
-                      
-                      <span className="mt-1 whitespace-nowrap rounded bg-black/80 px-2 py-0.5 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border border-white/10">
-                        {base.player_name} <span className="text-gray-400 font-normal">({label})</span>
-                      </span>
-                    </div>
-                  )
-                })}
-
-                {/* Marqueurs */}
-                {showFastTravels && fastTravelMarkers.map((point) => (
-                  <img key={point.key} src="/palworld-map/fast_travel.webp" alt="Fast Travel" className="absolute z-20 h-7 w-7 select-none object-contain drop-shadow-md" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} draggable={false} />
-                ))}
-                {showBossTowers && bossTowerMarkers.map((point) => (
-                  <img key={point.key} src="/palworld-map/boss_tower.webp" alt="Boss Tower" className="absolute z-20 h-8 w-8 select-none object-contain drop-shadow-lg" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} draggable={false} />
-                ))}
-
-                {/* Joueurs Actifs */}
-                {showPlayers && playerGroups.map((group) => {
-                  const isHovered = hoveredGroupId === group.id
-                  return (
-                    <div key={group.id}>
-                      {group.players.map(({ player, x, y }, index) => {
-                        const offset = getFanoutOffset(index, group.players.length, scale)
-                        return (
-                          <div key={getPlayerKey(player)} className={`absolute ${isHovered ? 'z-40' : 'z-30'}`} style={{ left: `${x}px`, top: `${y}px` }} onMouseEnter={() => setHoveredGroupId(group.id)} onMouseLeave={() => setHoveredGroupId(null)}>
-                            <div className="pointer-events-none absolute left-0 top-0 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-sm border border-red-500 bg-red-600/80 shadow-[0_0_8px_rgba(239,68,68,0.8)]" style={{ transform: `translate(-50%, -50%) scale(${1 / scale})` }} />
-                            <img src="/palworld-map/player.webp" alt="" className="absolute left-0 top-0 h-8 w-8 -translate-x-1/2 -translate-y-1/2 select-none object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]" style={{ transform: `translate(-50%, -50%) scale(${1 / scale})` }} draggable={false} />
-                            <div className="absolute left-0 top-0" style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${1 / scale})`, transformOrigin: 'center bottom' }}>
-                              <div className="absolute left-0 top-0 flex flex-col items-center justify-center min-w-[85px] rounded-lg border border-border/50 bg-black/75 px-2 py-1.5 shadow-2xl backdrop-blur-md" style={{ transform: 'translate(-50%, calc(-100% - 16px))' }}>
-                                <span className="whitespace-nowrap text-xs font-bold text-amber-400">{player.name}</span>
-                                <div className="mt-0.5 text-[10px] font-semibold text-gray-300">Niv. {player.level || '?'}</div>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )
-                })}
-              </div>
+        {/* PANNEAU FLOTTANT DROIT : Joueurs (Caché sur mobile) */}
+        <div className="absolute right-4 top-4 z-50 flex hidden w-72 flex-col lg:flex max-h-[calc(100%-2rem)] pointer-events-none">
+          <Card className="pointer-events-auto flex flex-col border-border/60 bg-card/85 text-foreground shadow-2xl shadow-black/20 backdrop-blur h-full">
+            <div className="p-4 border-b border-border/60 flex items-center justify-between">
+              <h3 className="font-semibold text-lg">Joueurs en ligne</h3>
+              <Badge variant="secondary" className="bg-primary/20 text-primary">{players.length}</Badge>
             </div>
-          </div>
-        </div>
-
-        {/* COLONNE 3 : Liste des joueurs (Droite) */}
-        <Card className="flex flex-col border-border/60 bg-card/85 text-foreground shadow-2xl shadow-black/20 backdrop-blur lg:h-fit xl:h-full max-h-[80vh]">
-          <div className="p-4 border-b border-border/60 flex items-center justify-between">
-            <h3 className="font-semibold text-lg">Joueurs en ligne</h3>
-            <Badge variant="secondary" className="bg-primary/20 text-primary">{players.length}</Badge>
-          </div>
-          
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            {players.length === 0 ? (
-              <div className="p-6 text-center text-sm text-muted-foreground">
-                Aucun joueur actuellement connecté au serveur.
-              </div>
-            ) : (
-              players.map((p) => (
-                <div key={getPlayerKey(p)} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors border border-transparent hover:border-border/50">
-                  <div className="h-10 w-10 shrink-0 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg">
-                    {p.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex flex-col min-w-0">
-                    <span className="text-sm font-bold truncate text-foreground">{p.name}</span>
-                    <span className="text-xs text-muted-foreground">Niveau {p.level || '?'}</span>
-                  </div>
+            
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {players.length === 0 ? (
+                <div className="p-6 text-center text-sm text-muted-foreground">
+                  Aucun joueur actuellement connecté.
                 </div>
-              ))
-            )}
-          </div>
-        </Card>
-
+              ) : (
+                [...players].sort((a, b) => (b.level || 0) - (a.level || 0)).map((p) => (
+                  <div key={getPlayerKey(p)} className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors border border-transparent hover:border-border/50">
+                    <div className="h-10 w-10 shrink-0 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-lg">
+                      {p.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-bold truncate text-foreground">{p.name}</span>
+                      <span className="text-xs text-muted-foreground">Niveau {p.level || '?'}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Card>
+        </div>
       </div>
 
       {/* MODAL : Formulaire d'ajout de base */}
@@ -554,16 +538,13 @@ export function LiveMap() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm p-4">
           <Card className="w-full max-w-sm p-6 shadow-2xl border-primary/50 bg-card">
             <h3 className="text-xl font-bold mb-2">Enregistrer ma base</h3>
-            <p className="text-sm text-muted-foreground mb-6">
-              Position GPS: X: {newBaseCoords.x.toFixed(0)} | Y: {newBaseCoords.y.toFixed(0)}
-            </p>
             
-            <div className="space-y-4">
+            <div className="space-y-4 mt-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Nom de la base ou du joueur</label>
                 <input 
                   type="text"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" 
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" 
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
                   placeholder="Ex: Forteresse de Kévin"
@@ -574,7 +555,7 @@ export function LiveMap() {
               <div className="space-y-2">
                 <label className="text-sm font-medium">Type de base</label>
                 <select
-                  className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={formData.type}
                   onChange={e => setFormData({...formData, type: e.target.value})}
                 >
@@ -594,7 +575,6 @@ export function LiveMap() {
                     value={formData.color}
                     onChange={e => setFormData({...formData, color: e.target.value})}
                   />
-                  <span className="text-xs text-muted-foreground flex items-center">Choisis ta couleur !</span>
                 </div>
               </div>
 
