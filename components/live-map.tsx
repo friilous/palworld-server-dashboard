@@ -502,7 +502,7 @@ export function LiveMap() {
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" 
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
-                  placeholder="Ex: Vos pseudos
+                  placeholder="Ex: Vos pseudos..."
                   autoFocus
                 />
               </div>
