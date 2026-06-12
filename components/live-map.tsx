@@ -158,32 +158,38 @@ export function LiveMap() {
 
   // --- CORRECTION: Formulaire de Boss ---
   const markBossDefeated = async () => {
-    if (!bossFormName) return
-    
-    // On copie le nom du boss et on ferme l'UI immédiatement pour rendre l'action fluide
-    const bossName = bossFormName
-    setIsReportingBoss(false)
-    setBossFormName('')
+      if (!bossFormName) return
+      
+      const bossName = bossFormName
+      setIsReportingBoss(false)
+      setBossFormName('')
 
-    const respawnTime = new Date(Date.now() + BOSS_RESPAWN_TIME_MS).toISOString()
-    const bossKey = `manual-boss-${Date.now()}`
+      const respawnTime = new Date(Date.now() + BOSS_RESPAWN_TIME_MS).toISOString()
+      const bossKey = `manual-boss-${Date.now()}`
 
-    // Utilisation de upsert pour réduire les chances d'erreur de clé primaire
-    const { error } = await supabase.from('boss_timers').upsert([{ 
-      boss_key: bossKey,
-      name: bossName,
-      respawn_time: respawnTime,
-      notified_respawn: false 
-    }])
+      // 1. Mise à jour immédiate de l'interface (Optimistic UI) pour que la liste s'affiche de suite
+      const newTimer = { 
+        id: Date.now(), // ID temporaire
+        boss_key: bossKey, 
+        name: bossName, 
+        respawn_time: respawnTime, 
+        notified_respawn: false 
+      }
+      setBossTimers(prev => [...prev, newTimer])
 
-    if (error) {
-      console.error("Erreur lors de l'enregistrement du boss dans Supabase :", error)
-      // On peut alerter l'utilisateur ou laisser tomber, mais l'UI ne reste plus figée.
-    } else {
+      // 2. Sauvegarde en base de données
+      const { error } = await supabase.from('boss_timers').upsert([{ 
+        boss_key: bossKey,
+        name: bossName,
+        respawn_time: respawnTime,
+        notified_respawn: false 
+      }])
+
+      if (error) console.error("Erreur d'enregistrement Supabase :", error)
+
+      // 3. Envoi du message RCON
       broadcastToChat(`⚔️ Le boss ${bossName} vient d'etre vaincu ! Reapparition dans 60 minutes.`)
-      fetchData()
     }
-  }
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -309,7 +315,7 @@ export function LiveMap() {
                   <div 
                     key={getPlayerKey(player)} 
                     className="absolute z-30 transition-transform duration-200 hover:scale-110 hover:z-40 flex flex-col items-center" 
-                    style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} 
+                    style={{ ...position, transform: `translate(-50%, -100%) scale(${1 / scale})` }}
                   >
                     {/* Nom au-dessus du pin avec marge négative pour l'effet collé */}
                     <div className="-mb-1.5 relative z-10 flex items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2 py-0.5 shadow-lg backdrop-blur-sm">
