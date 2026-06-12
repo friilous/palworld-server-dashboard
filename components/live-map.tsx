@@ -362,13 +362,18 @@ export function LiveMap() {
             }}
             onWheel={handleWheel}
           >
-            <div
-              ref={mapPlaneRef}
-              className="absolute left-1/2 top-1/2 h-full w-full will-change-transform"
-              style={{ transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${scale})`, transformOrigin: 'center center' }}
-            >
-              <img src={MAP_IMAGE_URL} alt="Carte du monde Palworld" className="block h-full w-full select-none object-cover" draggable={false} onLoad={() => { setMapImageLoaded(true); setMapImageError(false) }} onError={() => { setMapImageLoaded(false); setMapImageError(true) }} />
-
+          <div
+            ref={mapPlaneRef}
+            className="absolute left-1/2 top-1/2 will-change-transform"
+            style={{ 
+              width: '1024px',  // On force un carré parfait
+              height: '1024px', // On force un carré parfait
+              transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${scale})`, 
+              transformOrigin: 'center center' 
+            }}
+          >
+            <img src={MAP_IMAGE_URL} alt="Carte du monde Palworld" className="block h-full w-full select-none" draggable={false} onLoad={() => { setMapImageLoaded(true); setMapImageError(false) }} onError={() => { setMapImageLoaded(false); setMapImageError(true) }} />
+            
               {/* Bases des Joueurs */}
               {showBases && bases.map((base) => {
                 const position = toScreenPercent([base.location_x, base.location_y])
