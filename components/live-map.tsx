@@ -372,8 +372,9 @@ export function LiveMap() {
               <img key={point.key} src="/palworld-map/fast_travel.webp" alt="Fast Travel" className="absolute z-20 h-7 w-7 select-none object-contain drop-shadow-md" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} draggable={false} />
             ))}
             
+
             {showBossTowers && bossTowerMarkers.map((point) => (
-              <img key={point.key} src="/palworld-map/pin-boss.png" alt="Boss" className="absolute z-20 h-10 w-10 select-none object-contain drop-shadow-lg" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} draggable={false} />
+              <img key={point.key} src="/palworld-map/pin-boss.png" alt="Boss Tower" className="absolute z-20 h-10 w-10 select-none object-contain drop-shadow-lg" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} draggable={false} />
             ))}
 
             {/* Joueurs Actifs */}
@@ -422,7 +423,7 @@ export function LiveMap() {
             </h3>
             <div className="space-y-3 rounded-xl border border-border/60 bg-muted/35 p-4">
               <ControlRow label="Points de téléportation" checked={showFastTravels} onCheckedChange={setShowFastTravels} />
-              <ControlRow label="Marqueurs de Boss" checked={showBossTowers} onCheckedChange={setShowBossTowers} />
+              <ControlRow label="Tours de Boss" checked={showBossTowers} onCheckedChange={setShowBossTowers} />
               <ControlRow label="Afficher les joueurs" checked={showPlayers} onCheckedChange={setShowPlayers} />
               <ControlRow label="Bases des joueurs" checked={showBases} onCheckedChange={setShowBases} />
             </div>
@@ -501,7 +502,7 @@ export function LiveMap() {
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" 
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
-                  placeholder="Ex: Forteresse de Kévin"
+                  placeholder="Ex: Vos pseudos
                   autoFocus
                 />
               </div>
