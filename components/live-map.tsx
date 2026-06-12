@@ -138,11 +138,20 @@ export function LiveMap() {
     const handleCenterMap = (e: Event) => {
       const customEvent = e as CustomEvent
       const { x, y } = customEvent.detail
+      
       if (x !== undefined && y !== undefined) {
-        const [mapX, mapY] = toMapPosition([x, y])
-        const targetPanX = -((mapY / 256) * 512)
-        const targetPanY = ((mapX / 256) * 512)
-        setZoom(4)
+        // 1. On force le type Number au cas où l'API renvoie des strings
+        const [mapX, mapY] = toMapPosition([Number(x), Number(y)])
+        
+        // 2. On calcule le scale cible basé sur le zoom voulu (ici 4)
+        const targetZoom = 4
+        const targetScale = 1 + targetZoom * 0.45
+        
+        // 3. On multiplie le décalage par le nouveau scale
+        const targetPanX = -((mapY / 256) * 512) * targetScale
+        const targetPanY = ((mapX / 256) * 512) * targetScale
+        
+        setZoom(targetZoom)
         setPan({ x: targetPanX, y: targetPanY })
       }
     }
@@ -307,7 +316,7 @@ export function LiveMap() {
               <img src={MAP_IMAGE_URL} alt="Carte du monde Palworld" className="block h-full w-full select-none" draggable={false} />
 
               {showFastTravels && fastTravelMarkers.map((marker) => (
-                <div key={marker.key} className="absolute z-10 flex items-center justify-center transition-transform hover:scale-110" style={{ ...marker.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
+                <div key={marker.key} className="absolute z-10 flex items-center justify-center" style={{ ...marker.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
                   <img src="/palworld-map/fast_travel.webp" alt="Fast Travel" className="h-6 w-6 object-contain drop-shadow-md" draggable={false} />
                 </div>
               ))}
@@ -316,8 +325,8 @@ export function LiveMap() {
                 const position = toScreenPercent([base.location_x, base.location_y])
                 const isMain = base.base_type === 'main'
                 return (
-                  <div key={base.id} className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
-                    <img src="/palworld-map/pin-base.png" alt="Base" className={`drop-shadow-xl transition-all duration-300 group-hover:scale-125 object-contain ${isMain ? "h-14 w-14" : "h-8 w-8"}`} style={{ filter: `drop-shadow(0px 0px 8px ${base.color_hex || '#3b82f6'})` }} draggable={false} />
+                  <div key={base.id} className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group" style={{ ...position, transform: `translate(-50%, -100%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
+                    <img src="/palworld-map/pin-base.png" alt="Base" className={`drop-shadow-xl transition-all duration-300 group-hover:scale-125 object-contain ${isMain ? "h-14 w-14" : "h-8 w-8"}`} draggable={false} />
                     <span className="mt-1 whitespace-nowrap rounded-md bg-black/85 px-2.5 py-1 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-lg backdrop-blur-sm border border-white/10 flex items-center gap-1">
                       {base.player_name} <span className="text-[9px] text-red-400 font-normal italic">(Double-clic pour suppr.)</span>
                     </span>
@@ -334,7 +343,7 @@ export function LiveMap() {
               {showPlayers && mappablePlayers.map((player) => { 
                 const position = toScreenPercent([player.location_x, player.location_y])
                 return (
-                  <div key={getPlayerKey(player)} className="absolute z-30 transition-transform duration-200 hover:scale-110 hover:z-40 flex flex-col items-center animate-in fade-in" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
+                  <div key={getPlayerKey(player)} className="absolute z-30 transition-transform duration-200 hover:scale-110 hover:z-40 flex flex-col items-center animate-in fade-in" style={{ ...position, transform: `translate(-50%, -100%) scale(${1 / scale})` }}>
                     <div className="-mb-1.5 relative z-10 flex items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2 py-0.5 shadow-lg backdrop-blur-sm">
                       <span className="whitespace-nowrap text-[11px] font-bold text-foreground drop-shadow-sm leading-tight">{player.name}</span>
                     </div>
