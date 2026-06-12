@@ -315,7 +315,7 @@ export function LiveMap() {
                   <div 
                     key={getPlayerKey(player)} 
                     className="absolute z-30 transition-transform duration-200 hover:scale-110 hover:z-40 flex flex-col items-center" 
-                    style={{ ...position, transform: `translate(-50%, -25%) scale(${1 / scale})` }}
+                    style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}
                   >
                     {/* Nom au-dessus du pin avec marge négative pour l'effet collé */}
                     <div className="-mb-1.5 relative z-10 flex items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2 py-0.5 shadow-lg backdrop-blur-sm">
