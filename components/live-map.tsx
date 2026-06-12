@@ -11,6 +11,11 @@ import { useServer } from '@/lib/server-context'
 import points from '@/lib/map-points.json'
 import { supabase } from '@/lib/supabase'
 
+
+const BASE_RADIUS = 8000; 
+const PLAYER_CLUSTER_RADIUS = 5000;
+
+
 const LANDSCAPE = [447900, 708920, -999940, -738920] as const
 const MAP_IMAGE_URL = '/palworld-map/full-map-z4.png'
 const MIN_ZOOM = 0
@@ -98,6 +103,52 @@ export function LiveMap() {
 
   const scale = 1 + zoom * 0.45
   const mappablePlayers = useMemo(() => players.filter((player) => player.location_x !== 0 || player.location_y !== 0), [players])
+
+    
+  const { basesWithPlayers, clusteredPlayers } = useMemo(() => {
+      // On prépare nos bases pour accueillir des joueurs
+      const basesData = bases.map(b => ({ ...b, players: [] as typeof mappablePlayers }))
+      const remainingPlayers: typeof mappablePlayers = []
+
+      // 1. Assigner les joueurs à la base la plus proche
+      mappablePlayers.forEach(player => {
+        let inBase = false
+        for (let base of basesData) {
+          const dist = Math.hypot(player.location_x - base.location_x, player.location_y - base.location_y)
+          if (dist < BASE_RADIUS) {
+            base.players.push(player)
+            inBase = true
+            break
+          }
+        }
+        if (!inBase) remainingPlayers.push(player)
+      })
+
+      // 2. Grouper les joueurs restants en "escouades" s'ils sont proches
+      const clusters: { id: string, x: number, y: number, players: typeof mappablePlayers }[] = []
+      
+      remainingPlayers.forEach(player => {
+        let addedToCluster = false
+        for (let cluster of clusters) {
+          const dist = Math.hypot(player.location_x - cluster.x, player.location_y - cluster.y)
+          if (dist < PLAYER_CLUSTER_RADIUS) {
+            cluster.players.push(player)
+            // On déplace légèrement le centre du groupe pour moyenner la position
+            cluster.x = (cluster.x * (cluster.players.length - 1) + player.location_x) / cluster.players.length
+            cluster.y = (cluster.y * (cluster.players.length - 1) + player.location_y) / cluster.players.length
+            addedToCluster = true
+            break
+          }
+        }
+        if (!addedToCluster) {
+          clusters.push({ id: `cluster-${player.name}`, x: player.location_x, y: player.location_y, players: [player] })
+        }
+      })
+
+      return { basesWithPlayers: basesData, clusteredPlayers: clusters }
+    }, [mappablePlayers, bases])
+
+
 
   const fastTravelMarkers = useMemo(() => points.fast_travel.map((point) => ({
     key: `fast-travel-${point[0]}-${point[1]}`, position: toScreenPercent([point[0], point[1]])
@@ -297,18 +348,33 @@ export function LiveMap() {
                 </div>
               ))}
 
-              {showBases && bases.map((base) => {
+              {showBases && basesWithPlayers.map((base) => {
                 const position = toScreenPercent([base.location_x, base.location_y])
                 const isMain = base.base_type === 'main'
                 return (
                   <div key={base.id} className="absolute z-20 cursor-pointer group" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
-                    {/* L'image est décalée de 50% vers le haut pour que la pointe soit au centre. Le hover est appliqué ici. */}
                     <img src="/palworld-map/pin-base.png" alt="Base" className={`drop-shadow-xl transition-transform duration-300 group-hover:scale-125 object-contain -translate-y-1/2 ${isMain ? "h-14 w-14" : "h-8 w-8"}`} draggable={false} />
-                    
-                    {/* Le texte est "absolute" et pointer-events-none pour ne pas gêner la souris */}
-                    <span className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 pointer-events-none whitespace-nowrap rounded-md bg-black/85 px-2.5 py-1 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-lg backdrop-blur-sm border border-white/10 flex items-center gap-1 z-30">
-                      {base.player_name} <span className="text-[9px] text-red-400 font-normal italic">(Double-clic pour suppr.)</span>
-                    </span>
+
+                    {/* Le conteneur du texte est maintenant en flex-col */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 pointer-events-none rounded-md bg-black/85 px-3 py-1.5 shadow-lg backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-30 flex flex-col items-center w-max">
+                      
+                      {/* Ligne 1 : Nom + Statut */}
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        {base.player_name}
+                        <span className="text-gray-400 text-[10px] font-normal">({isMain ? 'Principale' : 'Secondaire'})</span>
+                      </span>
+                      
+                      {/* Ligne 2 (Optionnelle) : Joueurs à l'intérieur */}
+                      {base.players && base.players.length > 0 && (
+                        <div className="mt-1 pt-1 border-t border-white/10 w-full flex flex-col items-center">
+                          <span className="text-[10px] text-green-400 font-semibold mb-0.5">🟢 {base.players.length} Joueur(s) dans la base</span>
+                          {base.players.map((p: any) => <span key={p.name} className="text-[9px] text-gray-300">{p.name}</span>)}
+                        </div>
+                      )}
+                      
+                      {/* Ligne 3 : L'aide à la suppression */}
+                      <span className="mt-1.5 text-[9px] text-red-400 font-normal italic">(Double-clic pour suppr.)</span>
+                    </div>
                   </div>
                 )
               })}
@@ -319,18 +385,29 @@ export function LiveMap() {
                 </div>
               ))}
 
-              {showPlayers && mappablePlayers.map((player) => { 
-                const position = toScreenPercent([player.location_x, player.location_y])
+              {showPlayers && clusteredPlayers.map((cluster) => { 
+                const position = toScreenPercent([cluster.x, cluster.y])
+                const isGroup = cluster.players.length > 1
+                
                 return (
-                  <div key={getPlayerKey(player)} className="absolute z-30 flex flex-col items-center group pointer-events-auto" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
+                  <div key={cluster.id} className="absolute z-30 flex flex-col items-center group pointer-events-auto" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
                     
-                    {/* L'étiquette de nom passe en absolute pour ne pas fausser le calcul de hauteur */}
-                    <div className="absolute bottom-full mb-1 pointer-events-none z-10 flex items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2 py-0.5 shadow-lg backdrop-blur-sm">
-                      <span className="whitespace-nowrap text-[11px] font-bold text-foreground drop-shadow-sm leading-tight">{player.name}</span>
+                    {/* NOUVEAU : Le nom grossit en même temps grâce au group-hover:scale-110 */}
+                    <div className="absolute bottom-full mb-1 pointer-events-none z-10 flex flex-col items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2 py-1 shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">
+                      {isGroup ? (
+                        <>
+                          {/* S'ils sont plusieurs, on affiche le nombre et la liste */}
+                          <span className="text-[10px] font-bold text-primary mb-0.5">{cluster.players.length} Joueurs ensemble</span>
+                          {cluster.players.map(p => <span key={p.name} className="whitespace-nowrap text-[11px] font-bold text-foreground leading-tight">{p.name}</span>)}
+                        </>
+                      ) : (
+                        /* S'il est seul, affichage classique */
+                        <span className="whitespace-nowrap text-[11px] font-bold text-foreground drop-shadow-sm leading-tight">{cluster.players[0].name}</span>
+                      )}
                     </div>
                     
-                    {/* Le grossissement est maintenant uniquement sur l'image, comme pour les bases */}
-                    <img src="/palworld-map/pin-joueur.png" alt={player.name} className="relative z-0 h-10 w-10 select-none object-contain drop-shadow-md transition-transform duration-300 group-hover:scale-125 -translate-y-1/2" draggable={false} />
+                    {/* Si c'est un groupe, l'icône est un peu plus grande */}
+                    <img src="/palworld-map/pin-joueur.png" alt="Joueur" className={`relative z-0 ${isGroup ? 'h-12 w-12' : 'h-10 w-10'} select-none object-contain drop-shadow-md transition-transform duration-300 group-hover:scale-125 -translate-y-1/2`} draggable={false} />
                   </div>
                 )
               })}
