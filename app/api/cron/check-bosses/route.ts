@@ -25,11 +25,15 @@ export async function GET(request: Request) {
   if (expiredTimers && expiredTimers.length > 0) {
     for (const timer of expiredTimers) {
       // Envoi du message au serveur Palworld via la bonne URL (avec /v1/api/)
-      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/palworld/v1/api/announce`, {
+      await fetch(`${process.env.NEXT_PUBLIC_BASE_URL.replace(/\/$/, '')}/api/palworld/announce`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: `Le boss ${timer.name} est de nouveau disponible !` })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.CRON_SECRET}` // Important pour la sécurité !
+        },
+        body: JSON.stringify({ message: `>>>>> ALERTE : Le boss ${timer.name} est de nouveau disponible ! <<<<<` })
       })
+      
 
       // On verrouille pour ne pas spammer
       await supabase.from('boss_timers').update({ notified_respawn: true }).eq('id', timer.id)
