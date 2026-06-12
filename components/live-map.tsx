@@ -374,7 +374,7 @@ export function LiveMap() {
             
 
             {showBossTowers && bossTowerMarkers.map((point) => (
-              <img key={point.key} src="/palworld-map/pin-boss.png" alt="Boss Tower" className="absolute z-20 h-10 w-10 select-none object-contain drop-shadow-lg" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} draggable={false} />
+              <img key={point.key} src="/palworld-map/boss_tower.webp" alt="Boss Tower" className="absolute z-20 h-10 w-10 select-none object-contain drop-shadow-lg" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} draggable={false} />
             ))}
 
             {/* Joueurs Actifs */}
