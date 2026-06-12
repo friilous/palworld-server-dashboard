@@ -134,30 +134,6 @@ export function LiveMap() {
     return () => clearInterval(interval)
   }, [])
 
-  useEffect(() => {
-    const handleCenterMap = (e: Event) => {
-      const customEvent = e as CustomEvent
-      const { x, y } = customEvent.detail
-      
-      if (x !== undefined && y !== undefined) {
-        // 1. On force le type Number au cas où l'API renvoie des strings
-        const [mapX, mapY] = toMapPosition([Number(x), Number(y)])
-        
-        // 2. On calcule le scale cible basé sur le zoom voulu (ici 4)
-        const targetZoom = 4
-        const targetScale = 1 + targetZoom * 0.45
-        
-        // 3. On multiplie le décalage par le nouveau scale
-        const targetPanX = -((mapY / 256) * 512) * targetScale
-        const targetPanY = ((mapX / 256) * 512) * targetScale
-        
-        setZoom(targetZoom)
-        setPan({ x: targetPanX, y: targetPanY })
-      }
-    }
-    window.addEventListener('palworld:center_map', handleCenterMap)
-    return () => window.removeEventListener('palworld:center_map', handleCenterMap)
-  }, [])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -325,9 +301,12 @@ export function LiveMap() {
                 const position = toScreenPercent([base.location_x, base.location_y])
                 const isMain = base.base_type === 'main'
                 return (
-                  <div key={base.id} className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group" style={{ ...position, transform: `translate(-50%, -100%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
-                    <img src="/palworld-map/pin-base.png" alt="Base" className={`drop-shadow-xl transition-all duration-300 group-hover:scale-125 object-contain ${isMain ? "h-14 w-14" : "h-8 w-8"}`} draggable={false} />
-                    <span className="mt-1 whitespace-nowrap rounded-md bg-black/85 px-2.5 py-1 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-lg backdrop-blur-sm border border-white/10 flex items-center gap-1">
+                  <div key={base.id} className="absolute z-20 cursor-pointer group" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onDoubleClick={() => handleDeleteBase(base.id, base.player_name)}>
+                    {/* L'image est décalée de 50% vers le haut pour que la pointe soit au centre. Le hover est appliqué ici. */}
+                    <img src="/palworld-map/pin-base.png" alt="Base" className={`drop-shadow-xl transition-transform duration-300 group-hover:scale-125 object-contain -translate-y-1/2 ${isMain ? "h-14 w-14" : "h-8 w-8"}`} draggable={false} />
+                    
+                    {/* Le texte est "absolute" et pointer-events-none pour ne pas gêner la souris */}
+                    <span className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 pointer-events-none whitespace-nowrap rounded-md bg-black/85 px-2.5 py-1 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-lg backdrop-blur-sm border border-white/10 flex items-center gap-1 z-30">
                       {base.player_name} <span className="text-[9px] text-red-400 font-normal italic">(Double-clic pour suppr.)</span>
                     </span>
                   </div>
@@ -343,11 +322,15 @@ export function LiveMap() {
               {showPlayers && mappablePlayers.map((player) => { 
                 const position = toScreenPercent([player.location_x, player.location_y])
                 return (
-                  <div key={getPlayerKey(player)} className="absolute z-30 transition-transform duration-200 hover:scale-110 hover:z-40 flex flex-col items-center animate-in fade-in" style={{ ...position, transform: `translate(-50%, -100%) scale(${1 / scale})` }}>
-                    <div className="-mb-1.5 relative z-10 flex items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2 py-0.5 shadow-lg backdrop-blur-sm">
+                  <div key={getPlayerKey(player)} className="absolute z-30 flex flex-col items-center group pointer-events-auto" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
+                    
+                    {/* L'étiquette de nom passe en absolute pour ne pas fausser le calcul de hauteur */}
+                    <div className="absolute bottom-full mb-1 pointer-events-none z-10 flex items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2 py-0.5 shadow-lg backdrop-blur-sm">
                       <span className="whitespace-nowrap text-[11px] font-bold text-foreground drop-shadow-sm leading-tight">{player.name}</span>
                     </div>
-                    <img src="/palworld-map/pin-joueur.png" alt={player.name} className="relative z-0 h-10 w-10 select-none object-contain drop-shadow-md" draggable={false} />
+                    
+                    {/* Le grossissement est maintenant uniquement sur l'image, comme pour les bases */}
+                    <img src="/palworld-map/pin-joueur.png" alt={player.name} className="relative z-0 h-10 w-10 select-none object-contain drop-shadow-md transition-transform duration-300 group-hover:scale-125 -translate-y-1/2" draggable={false} />
                   </div>
                 )
               })}
