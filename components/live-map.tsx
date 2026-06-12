@@ -17,34 +17,37 @@ const MIN_ZOOM = 0
 const MAX_ZOOM = 10
 const BOSS_RESPAWN_TIME_MS = 60 * 60 * 1000 // 1 Heure
 
-
-
-const SCALE_X = 512.60;
-const SCALE_Y = 512.60;
-const OFFSET_X = 14300; 
-const OFFSET_Y = 14300;
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
+// Ces constantes correspondent à la projection standard utilisée par la communauté Palworld
+const SCALE = 462.962962963;
+const OFFSET_X = 157664.55791065; // Correspond à la conversion X
+const OFFSET_Y = 123467.1611767;  // Correspond à la conversion Y
+
 function toMapPosition([worldX, worldY]: [number, number]): [number, number] {
-  // On multiplie les coordonnées du jeu par l'échelle et on ajuste avec l'offset
-  const mapX = (worldX * SCALE_X) + OFFSET_X;
-  const mapY = (worldY * SCALE_Y) + OFFSET_Y;
+  // Inversion de la logique du projet pour matcher ton affichage web
+  const mapX = (worldY - OFFSET_X) / SCALE;
+  const mapY = (worldX + OFFSET_Y) / SCALE;
   return [mapX, mapY];
 }
 
 function fromMapPosition([mapX, mapY]: [number, number]): [string, string] {
-  // Opération inverse pour retrouver les coordonnées du jeu à partir du clic map
-  const worldX = (mapX - OFFSET_X) / SCALE_X;
-  const worldY = (mapY - OFFSET_Y) / SCALE_Y;
-  return [worldX.toFixed(2), worldY.toFixed(2)];
+  // Pour retrouver les coordonnées réelles du jeu depuis la souris
+  const worldX = (mapY * SCALE) - OFFSET_Y;
+  const worldY = (mapX * SCALE) + OFFSET_X;
+  return [worldX.toFixed(1), worldY.toFixed(1)];
 }
 
 function toScreenPercent(position: [number, number]) {
-  const [mapX, mapY] = toMapPosition(position)
-  return { left: `${(mapY / 256) * 100}%`, top: `${(-mapX / 256) * 100}%` }
+  const [mapX, mapY] = toMapPosition(position);
+  // Le code que tu as trouvé utilise une échelle de -1000 à 1000 pour 2000 unités
+  // Si ton image est en 256x256, il faut adapter :
+  return { 
+    left: `${((mapX + 1000) / 2000) * 100}%`, 
+    top: `${((1000 - mapY) / 2000) * 100}%` 
+  }
 }
 
 function ControlRow({ label, checked, onCheckedChange }: { label: string, checked: boolean, onCheckedChange: (checked: boolean) => void }) {
