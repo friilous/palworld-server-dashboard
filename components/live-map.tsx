@@ -135,7 +135,7 @@ export function LiveMap() {
   const broadcastToChat = async (message: string) => {
     console.log("Envoi au chat du serveur :", message)
     try {
-      await fetch('/api/announce', {
+      await fetch('/api/palworld/announce', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(message) // Directement la chaîne de caractères
