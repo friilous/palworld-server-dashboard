@@ -17,21 +17,29 @@ const MIN_ZOOM = 0
 const MAX_ZOOM = 10
 const BOSS_RESPAWN_TIME_MS = 60 * 60 * 1000 // 1 Heure
 
+
+
+const SCALE_X = 512.60;
+const SCALE_Y = 512.60;
+const OFFSET_X = 14300; 
+const OFFSET_Y = 14300;
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
 }
 
 function toMapPosition([worldX, worldY]: [number, number]): [number, number] {
-  if (worldX >= -256 && worldX <= 256) return [worldX, worldY]
-  const x = -256 + (256 * (worldX - LANDSCAPE[2])) / (LANDSCAPE[0] - LANDSCAPE[2])
-  const y = (256 * (worldY - LANDSCAPE[3])) / (LANDSCAPE[1] - LANDSCAPE[3])
-  return [x, y]
+  // On multiplie les coordonnées du jeu par l'échelle et on ajuste avec l'offset
+  const mapX = (worldX * SCALE_X) + OFFSET_X;
+  const mapY = (worldY * SCALE_Y) + OFFSET_Y;
+  return [mapX, mapY];
 }
 
 function fromMapPosition([mapX, mapY]: [number, number]): [string, string] {
-  const worldX = ((mapX + 256) * (LANDSCAPE[0] - LANDSCAPE[2])) / 256 + LANDSCAPE[2]
-  const worldY = (mapY * (LANDSCAPE[1] - LANDSCAPE[3])) / 256 + LANDSCAPE[3]
-  return [worldX.toFixed(2), worldY.toFixed(2)]
+  // Opération inverse pour retrouver les coordonnées du jeu à partir du clic map
+  const worldX = (mapX - OFFSET_X) / SCALE_X;
+  const worldY = (mapY - OFFSET_Y) / SCALE_Y;
+  return [worldX.toFixed(2), worldY.toFixed(2)];
 }
 
 function toScreenPercent(position: [number, number]) {
