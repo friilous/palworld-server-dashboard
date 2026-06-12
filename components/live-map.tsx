@@ -138,7 +138,7 @@ export function LiveMap() {
       await fetch('/api/announce', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: message }) // Avec la clé 'message'
+        body: JSON.stringify(message) // Directement la chaîne de caractères
       })
     } catch (e) {
       console.error("Erreur d'envoi du message chat", e)
