@@ -379,13 +379,16 @@ export function LiveMap() {
                     
                     {/* NOUVEAU : Indicateur permanent s'il y a des joueurs */}
                     {base.players && base.players.length > 0 && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-1.5 bg-green-500/90 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow-lg border border-white/20 pointer-events-none z-10 transition-transform group-hover:-translate-y-2">
-                        {/* Petit point blanc qui clignote */}
-                        <span className="relative flex h-1.5 w-1.5">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white"></span>
+                      <div className="absolute -top-5 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-md border-b-2 border-green-400 shadow-[0_4px_12px_rgba(0,0,0,0.5)] z-10 pointer-events-none transition-all group-hover:-translate-y-2">
+                        {/* Mini barres d'activité style égaliseur */}
+                        <div className="flex gap-[2px] items-end h-2.5">
+                          <div className="w-0.5 h-full bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '0ms' }} />
+                          <div className="w-0.5 h-[60%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '150ms' }} />
+                          <div className="w-0.5 h-[80%] bg-green-400 animate-[bounce_1s_infinite]" style={{ animationDelay: '300ms' }} />
+                        </div>
+                        <span className="text-[9px] font-bold text-green-400 tracking-widest uppercase">
+                          {base.players.length} Actif
                         </span>
-                        {base.players.length}
                       </div>
                     )}
 
