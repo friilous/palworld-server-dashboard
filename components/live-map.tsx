@@ -1,12 +1,15 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MapPinIcon, ZoomInIcon, ZoomOutIcon, CrosshairIcon, SwordsIcon, BellIcon, TrashIcon, XIcon, MoveIcon } from 'lucide-react'
+import { 
+  MapPinIcon, ZoomInIcon, ZoomOutIcon, CrosshairIcon, SwordsIcon, 
+  BellIcon, TrashIcon, XIcon, MoveIcon, StarIcon, LogOutIcon, 
+  UserIcon, MessageSquareIcon, ClockIcon, PencilIcon, CheckIcon 
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { getPlayerKey } from '@/lib/palworld'
 import { useServer } from '@/lib/server-context'
 import points from '@/lib/map-points.json'
 import { supabase } from '@/lib/supabase'
@@ -100,12 +103,65 @@ export function LiveMap() {
   const [isReportingBoss, setIsReportingBoss] = useState(false)
   const [bossFormName, setBossFormName] = useState('')
 
+  // Nouveaux states pour le compte et les features sociales
+  const [currentUser, setCurrentUser] = useState<string | null>(null)
+  const [unclaimedPlayers, setUnclaimedPlayers] = useState<any[]>([])
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(true)
+
+  // States pour la base sélectionnée (Avis, Notes, Visites)
+  const [baseReviews, setBaseReviews] = useState<any[]>([])
+  const [baseRatings, setBaseRatings] = useState<any[]>([])
+  const [baseVisits, setBaseVisits] = useState<any[]>([])
+  const [newReviewContent, setNewReviewContent] = useState('')
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null)
+  const [editingReviewContent, setEditingReviewContent] = useState('')
+
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const mapPlaneRef = useRef<HTMLDivElement | null>(null)
+  
+  // Ref pour éviter de spammer la BDD avec les visites
+  const recordedVisitsRef = useRef<Set<string>>(new Set())
 
   const scale = 1 + zoom * 0.45
   const mappablePlayers = useMemo(() => players.filter((player) => player.location_x !== 0 || player.location_y !== 0), [players])
 
+  // --- INITIALISATION DU JOUEUR ---
+  useEffect(() => {
+    const savedUser = localStorage.getItem('palworld_current_user')
+    if (savedUser) {
+      setCurrentUser(savedUser)
+      setIsAuthModalOpen(false)
+    } else {
+      fetchUnclaimedPlayers()
+    }
+  }, [])
+
+  const fetchUnclaimedPlayers = async () => {
+    const { data } = await supabase.from('known_players').select('*').eq('claimed_by', false)
+    if (data) setUnclaimedPlayers(data)
+  }
+
+  const handleSelectUser = async (playerName: string, isUnknown: boolean = false) => {
+    if (!isUnknown) {
+      await supabase.from('known_players').update({ claimed_by: true }).eq('name', playerName)
+    }
+    const finalName = isUnknown ? 'Inconnu' : playerName
+    localStorage.setItem('palworld_current_user', finalName)
+    setCurrentUser(finalName)
+    setIsAuthModalOpen(false)
+  }
+
+  const handleDisconnect = async () => {
+    if (currentUser && currentUser !== 'Inconnu') {
+      await supabase.from('known_players').update({ claimed_by: false }).eq('name', currentUser)
+    }
+    localStorage.removeItem('palworld_current_user')
+    setCurrentUser(null)
+    setIsAuthModalOpen(true)
+    fetchUnclaimedPlayers()
+  }
+
+  // --- LOGIQUE DES BASES ET CLUSTERS ---
   const { basesWithPlayers, clusteredPlayers } = useMemo(() => {
       const basesData = bases.map(b => ({ ...b, players: [] as typeof mappablePlayers }))
       const remainingPlayers: typeof mappablePlayers = []
@@ -145,6 +201,24 @@ export function LiveMap() {
       return { basesWithPlayers: basesData, clusteredPlayers: clusters }
     }, [mappablePlayers, bases])
 
+  // --- AUTOMATISATION DES VISITES ---
+  useEffect(() => {
+    basesWithPlayers.forEach(base => {
+      base.players.forEach((p: any) => {
+        const visitKey = `${base.id}-${p.name}`
+        if (!recordedVisitsRef.current.has(visitKey)) {
+          recordedVisitsRef.current.add(visitKey)
+          // On insère en BDD la visite
+          supabase.from('base_visits').insert([{
+            base_id: base.id,
+            player_name: p.name,
+            visited_at: new Date().toISOString()
+          }]).then()
+        }
+      })
+    })
+  }, [basesWithPlayers])
+
   const fastTravelMarkers = useMemo(() => points.fast_travel.map((point) => ({
     key: `fast-travel-${point[0]}-${point[1]}`, position: toScreenPercent([point[0], point[1]])
   })), [])
@@ -180,21 +254,24 @@ export function LiveMap() {
     return () => clearInterval(interval)
   }, [])
 
+  // --- FETCH DES INFOS LORSQU'UNE BASE EST SELECTIONNEE ---
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (isAddingBase) {
-          setIsAddingBase(false)
-          setNewBaseCoords(null)
-        }
-        if (movingBaseId) {
-          setMovingBaseId(null)
-        }
-      }
+    if (!selectedBase) return
+
+    const fetchBaseDetails = async () => {
+      const [reviewsRes, ratingsRes, visitsRes] = await Promise.all([
+        supabase.from('base_reviews').select('*').eq('base_id', selectedBase.id).order('created_at', { ascending: false }),
+        supabase.from('base_ratings').select('*').eq('base_id', selectedBase.id),
+        supabase.from('base_visits').select('*').eq('base_id', selectedBase.id).order('visited_at', { ascending: false }).limit(10)
+      ])
+      if (reviewsRes.data) setBaseReviews(reviewsRes.data)
+      if (ratingsRes.data) setBaseRatings(ratingsRes.data)
+      if (visitsRes.data) setBaseVisits(visitsRes.data)
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isAddingBase, movingBaseId])
+
+    fetchBaseDetails()
+  }, [selectedBase])
+
 
   const broadcastToChat = async (message: string) => {
     try {
@@ -212,7 +289,6 @@ export function LiveMap() {
     if (!newBaseCoords) return
     if (!formData.isUnknown && !formData.name) return
 
-    // CORRECTION ICI : On utilise 'main' par défaut au lieu de 'unknown' pour respecter la contrainte Supabase
     const baseType = formData.isUnknown ? 'main' : formData.type
     const playerName = formData.isUnknown ? 'Base Inconnue' : formData.name
     const guildName = formData.isUnknown ? null : formData.faction
@@ -222,7 +298,8 @@ export function LiveMap() {
       guild_name: guildName,
       base_type: baseType, 
       location_x: newBaseCoords.x, 
-      location_y: newBaseCoords.y
+      location_y: newBaseCoords.y,
+      created_by: currentUser // Ajout de qui a trouvé/créé la base
     }])
     
     if (error) {
@@ -262,6 +339,57 @@ export function LiveMap() {
     setMovingBaseId(selectedBase.id)
     setSelectedBase(null)
   }
+
+  // --- RATING & REVIEWS LOGIC ---
+  const handleRateBase = async (rating: number) => {
+    if (!currentUser || currentUser === 'Inconnu' || !selectedBase) return
+
+    const existingRating = baseRatings.find(r => r.player_name === currentUser)
+    
+    if (existingRating) {
+      await supabase.from('base_ratings').update({ rating }).eq('id', existingRating.id)
+      setBaseRatings(prev => prev.map(r => r.id === existingRating.id ? { ...r, rating } : r))
+    } else {
+      const { data } = await supabase.from('base_ratings').insert([{
+        base_id: selectedBase.id, player_name: currentUser, rating
+      }]).select().single()
+      if (data) setBaseRatings([...baseRatings, data])
+    }
+  }
+
+  const submitReview = async () => {
+    if (!newReviewContent.trim() || !currentUser || currentUser === 'Inconnu' || !selectedBase) return
+
+    const { data } = await supabase.from('base_reviews').insert([{
+      base_id: selectedBase.id,
+      player_name: currentUser,
+      content: newReviewContent
+    }]).select().single()
+
+    if (data) {
+      setBaseReviews([data, ...baseReviews])
+      setNewReviewContent('')
+    }
+  }
+
+  const handleEditReview = async (id: string) => {
+    if (!editingReviewContent.trim()) return
+    await supabase.from('base_reviews').update({ content: editingReviewContent }).eq('id', id)
+    setBaseReviews(prev => prev.map(r => r.id === id ? { ...r, content: editingReviewContent } : r))
+    setEditingReviewId(null)
+  }
+
+  const handleDeleteReview = async (id: string) => {
+    if (window.confirm("Supprimer ce commentaire ?")) {
+      await supabase.from('base_reviews').delete().eq('id', id)
+      setBaseReviews(prev => prev.filter(r => r.id !== id))
+    }
+  }
+
+  const averageRating = baseRatings.length > 0 
+    ? (baseRatings.reduce((acc, curr) => acc + curr.rating, 0) / baseRatings.length).toFixed(1) 
+    : 0
+
 
   const handleDeleteTimer = async (id: string, bossName: string) => {
     if (window.confirm(`Es-tu sûr de vouloir supprimer le chronomètre pour ${bossName} ?`)) {
@@ -304,11 +432,9 @@ export function LiveMap() {
 
   const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 0) return 
-    event.preventDefault() // <-- C'est ça qui bloquait les clics enfants sans stopPropagation
+    event.preventDefault() 
     
-    if (selectedBase) {
-      setSelectedBase(null)
-    }
+    if (selectedBase) setSelectedBase(null)
 
     dragStartRef.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y }
     setIsDragging(true)
@@ -396,6 +522,37 @@ export function LiveMap() {
 
   return (
     <>
+      {/* MODAL DE CONNEXION / SELECTION DE COMPTE */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <Card className="w-full max-w-md p-6 shadow-2xl border-white/10 bg-background/95 backdrop-blur-xl rounded-2xl text-center space-y-6">
+            <h2 className="text-2xl font-bold">Qui es-tu ?</h2>
+            <p className="text-sm text-muted-foreground">
+              Sélectionne ton compte pour lier tes actions (bases, avis, notes). Si tu n'es pas dans la liste, connecte-toi une fois au serveur en jeu.
+            </p>
+            
+            <div className="max-h-[300px] overflow-y-auto space-y-2 text-left custom-scrollbar p-1">
+              {unclaimedPlayers.map(p => (
+                <Button key={p.name} variant="outline" className="w-full justify-start h-12" onClick={() => handleSelectUser(p.name)}>
+                  <UserIcon className="mr-3 h-5 w-5 text-primary" /> {p.name}
+                </Button>
+              ))}
+              {unclaimedPlayers.length === 0 && (
+                <div className="text-center p-4 text-sm text-gray-400 italic border border-white/5 rounded-lg bg-white/5">
+                  Aucun joueur non assigné trouvé.
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-white/10">
+              <Button variant="ghost" className="w-full text-gray-400 hover:text-white" onClick={() => handleSelectUser('Inconnu', true)}>
+                Continuer en tant qu'Inconnu
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
       <div className="flex flex-col h-[calc(100vh-4rem)] w-full overflow-hidden bg-background text-foreground relative font-sans">
         
         {isAddingBase && !newBaseCoords && (
@@ -407,6 +564,19 @@ export function LiveMap() {
         {movingBaseId && (
           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-yellow-600 text-white px-6 py-2 rounded-full font-bold shadow-lg animate-pulse border border-yellow-400">
             🖱️ Clic droit pour placer la base — (Echap pour annuler)
+          </div>
+        )}
+
+        {/* BARRE UTILISATEUR EN BAS AU MILIEU */}
+        {currentUser && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-black/80 backdrop-blur-xl border border-white/10 px-4 py-2 rounded-full shadow-2xl">
+            <UserIcon className="h-4 w-4 text-primary" />
+            <span className="text-sm font-bold text-white">
+              {currentUser}
+            </span>
+            <button onClick={handleDisconnect} className="ml-2 text-gray-400 hover:text-red-400 transition-colors p-1" title="Changer de compte">
+              <LogOutIcon className="h-4 w-4" />
+            </button>
           </div>
         )}
 
@@ -432,7 +602,6 @@ export function LiveMap() {
 
               {showBases && basesWithPlayers.map((base) => {
                 const position = toScreenPercent([base.location_x, base.location_y])
-                // CORRECTION ICI : On détecte la base inconnue par son nom et plus par base_type === 'unknown'
                 const isUnknown = base.player_name === 'Base Inconnue'
                 const isMain = base.base_type === 'main'
                 const isActive = base.players && base.players.length > 0
@@ -495,16 +664,15 @@ export function LiveMap() {
                       </div>
                     )}
 
-                    {/* FICHE D'INFORMATION CORRIGEE */}
+                    {/* FICHE D'INFORMATION COMPLETE */}
                     {isSelected && (
                       <div 
                         className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 cursor-default animate-in fade-in zoom-in-95 duration-200"
-                        // CORRECTION ICI : On stop la propagation du mousedown pour éviter que la carte n'intercepte le clic !
                         onMouseDown={(e) => e.stopPropagation()}
                         onMouseUp={(e) => e.stopPropagation()}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <Card className="w-[300px] p-4 shadow-2xl shadow-black/50 border-white/10 bg-background/95 backdrop-blur-xl rounded-xl relative flex flex-col gap-3">
+                        <Card className="w-[340px] max-h-[400px] overflow-y-auto custom-scrollbar p-4 shadow-2xl shadow-black/50 border-white/10 bg-background/95 backdrop-blur-xl rounded-xl relative flex flex-col gap-4">
                           
                           <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-background/95 border-l border-t border-white/10 rotate-45" />
 
@@ -512,17 +680,47 @@ export function LiveMap() {
                             <XIcon className="h-4 w-4" />
                           </button>
                           
-                          <div className="flex items-center gap-3 relative z-10">
-                            <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
+                          {/* HEADER FICHE */}
+                          <div className="flex items-start gap-3 relative z-10">
+                            <div className="h-10 w-10 mt-1 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
                               <MapPinIcon className="h-5 w-5 text-primary" />
                             </div>
-                            <div className="min-w-0">
+                            <div className="min-w-0 pr-6">
                               <h3 className="text-base font-bold truncate">{isUnknown ? 'Base Inconnue' : base.player_name}</h3>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs text-muted-foreground mb-1">
                                 {isUnknown ? 'Non revendiquée' : base.base_type === 'main' ? 'Base Principale' : 'Base Secondaire'}
                               </p>
+                              {base.created_by && (
+                                <p className="text-[10px] text-gray-400 italic">Découverte par : {base.created_by}</p>
+                              )}
+                              
+                              {/* NOTE MOYENNE */}
+                              {!isUnknown && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <StarIcon className="h-3 w-3 text-yellow-400 fill-yellow-400" />
+                                  <span className="text-xs font-bold">{averageRating}</span>
+                                  <span className="text-[10px] text-gray-400">({baseRatings.length} avis)</span>
+                                </div>
+                              )}
                             </div>
                           </div>
+
+                          {/* SYSTEME DE VOTE ETOILES */}
+                          {!isUnknown && currentUser && currentUser !== 'Inconnu' && (
+                            <div className="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5 text-sm">
+                              <span className="text-xs text-gray-300">Ta note :</span>
+                              <div className="flex gap-1">
+                                {[1, 2, 3, 4, 5].map(star => {
+                                  const myRating = baseRatings.find(r => r.player_name === currentUser)?.rating || 0
+                                  return (
+                                    <button key={star} onClick={() => handleRateBase(star)} className="hover:scale-110 transition-transform">
+                                      <StarIcon className={`h-4 w-4 ${star <= myRating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-500'}`} />
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )}
 
                           {isUnknown ? (
                             <div className="space-y-3 p-3 rounded-lg border border-primary/30 bg-primary/5 relative z-10">
@@ -535,12 +733,80 @@ export function LiveMap() {
                               <Button size="sm" className="w-full rounded-lg h-8 text-xs" onClick={handleClaimBase} disabled={!claimData.name}>Claim !</Button>
                             </div>
                           ) : (
-                            <div className="space-y-2 relative z-10">
-                              <div className="p-3 rounded-lg border border-white/5 bg-white/5 text-center text-xs text-gray-400">
-                                <p>Historique des visites</p>
-                                <span className="text-[10px] italic">(Bientôt disponible)</span>
+                            <>
+                              {/* SECTIONS AVIS */}
+                              <div className="space-y-2 relative z-10">
+                                <h4 className="text-xs font-bold flex items-center gap-2"><MessageSquareIcon className="h-3 w-3" /> Commentaires</h4>
+                                
+                                {currentUser && currentUser !== 'Inconnu' && (
+                                  <div className="flex gap-2">
+                                    <input 
+                                      type="text" 
+                                      placeholder="Laisse un avis..." 
+                                      className="flex h-8 w-full rounded-lg border border-white/10 bg-black/40 px-2 text-xs outline-none focus:ring-1 focus:ring-primary"
+                                      value={newReviewContent}
+                                      onChange={(e) => setNewReviewContent(e.target.value)}
+                                      onKeyDown={(e) => { if (e.key === 'Enter') submitReview() }}
+                                    />
+                                    <Button size="sm" className="h-8 px-2" onClick={submitReview}>OK</Button>
+                                  </div>
+                                )}
+
+                                <div className="space-y-2 max-h-[120px] overflow-y-auto custom-scrollbar pr-1">
+                                  {baseReviews.map(review => {
+                                    const isOwner = review.player_name === base.player_name
+                                    const isMe = review.player_name === currentUser
+                                    const isEditing = editingReviewId === review.id
+
+                                    return (
+                                      <div key={review.id} className={`p-2 rounded-lg text-xs flex flex-col gap-1 ${isOwner ? 'bg-primary/10 border border-primary/30' : 'bg-white/5 border border-white/5'}`}>
+                                        <div className="flex justify-between items-center">
+                                          <span className={`font-bold ${isOwner ? 'text-primary' : 'text-gray-300'}`}>
+                                            {review.player_name} {isOwner && <span className="text-[9px] bg-primary/20 px-1 rounded ml-1">Proprio</span>}
+                                          </span>
+                                          <span className="text-[9px] text-gray-500">
+                                            {new Date(review.created_at).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
+                                          </span>
+                                        </div>
+                                        
+                                        {isEditing ? (
+                                          <div className="flex gap-1 mt-1">
+                                            <input type="text" className="h-6 flex-1 bg-black/50 border border-white/20 rounded px-1 text-xs outline-none" value={editingReviewContent} onChange={e => setEditingReviewContent(e.target.value)} autoFocus />
+                                            <button onClick={() => handleEditReview(review.id)} className="text-green-400"><CheckIcon className="h-3 w-3" /></button>
+                                            <button onClick={() => setEditingReviewId(null)} className="text-red-400"><XIcon className="h-3 w-3" /></button>
+                                          </div>
+                                        ) : (
+                                          <div className="flex justify-between items-start group/review">
+                                            <p className="text-gray-200 break-words flex-1 pr-2">{review.content}</p>
+                                            {isMe && (
+                                              <div className="opacity-0 group-hover/review:opacity-100 flex gap-1 transition-opacity shrink-0">
+                                                <button onClick={() => { setEditingReviewId(review.id); setEditingReviewContent(review.content); }} className="text-gray-400 hover:text-white"><PencilIcon className="h-3 w-3" /></button>
+                                                <button onClick={() => handleDeleteReview(review.id)} className="text-gray-400 hover:text-red-400"><TrashIcon className="h-3 w-3" /></button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                  {baseReviews.length === 0 && <p className="text-[10px] text-gray-500 italic text-center">Aucun commentaire.</p>}
+                                </div>
                               </div>
-                            </div>
+
+                              {/* SECTION HISTORIQUE VISITES */}
+                              <div className="space-y-2 relative z-10 pt-2 border-t border-white/10">
+                                <h4 className="text-xs font-bold flex items-center gap-2"><ClockIcon className="h-3 w-3" /> Dernières visites</h4>
+                                <div className="max-h-[80px] overflow-y-auto custom-scrollbar flex flex-col gap-1 pr-1">
+                                  {baseVisits.map(visit => (
+                                    <div key={visit.id} className="flex justify-between items-center text-[10px] text-gray-400">
+                                      <span>👤 {visit.player_name}</span>
+                                      <span>{new Date(visit.visited_at).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}</span>
+                                    </div>
+                                  ))}
+                                  {baseVisits.length === 0 && <p className="text-[10px] text-gray-500 italic text-center">Aucune visite enregistrée.</p>}
+                                </div>
+                              </div>
+                            </>
                           )}
 
                           <div className="flex gap-2 justify-between pt-3 border-t border-white/10 relative z-10">
