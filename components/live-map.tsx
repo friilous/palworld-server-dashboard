@@ -212,13 +212,14 @@ export function LiveMap() {
     if (!newBaseCoords) return
     if (!formData.isUnknown && !formData.name) return
 
-    const baseType = formData.isUnknown ? 'unknown' : formData.type
+    // CORRECTION ICI : On utilise 'main' par défaut au lieu de 'unknown' pour respecter la contrainte Supabase
+    const baseType = formData.isUnknown ? 'main' : formData.type
     const playerName = formData.isUnknown ? 'Base Inconnue' : formData.name
     const guildName = formData.isUnknown ? null : formData.faction
 
     const { error } = await supabase.from('player_bases').insert([{
       player_name: playerName, 
-      guild_name: guildName, // Sécurisé : Envoie null si non défini
+      guild_name: guildName,
       base_type: baseType, 
       location_x: newBaseCoords.x, 
       location_y: newBaseCoords.y
@@ -303,9 +304,8 @@ export function LiveMap() {
 
   const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
     if (event.button !== 0) return 
-    event.preventDefault()
+    event.preventDefault() // <-- C'est ça qui bloquait les clics enfants sans stopPropagation
     
-    // Ferme la fiche d'info si l'utilisateur commence à glisser la carte
     if (selectedBase) {
       setSelectedBase(null)
     }
@@ -377,18 +377,15 @@ export function LiveMap() {
       setZoom(newZoom)
     }, [zoom, pan])
 
-  // Fonction pour gérer le clic sur une base (Centrage + Ouverture fiche)
   const handleBaseClick = (e: React.MouseEvent, base: any) => {
-    e.stopPropagation() // Empêche de déclencher le drag ou d'autres clics
+    e.stopPropagation() 
     setSelectedBase(base)
 
     const [mapX, mapY] = toMapPosition([base.location_x, base.location_y])
     
-    // Calcul de la distance pour centrer le point
     const percentLeft = mapY / 256
     const percentTop = -mapX / 256
     
-    // 1024 est la largeur/hauteur interne définie pour la carte
     const targetPanX = (0.5 - percentLeft) * 1024
     const targetPanY = (0.5 - percentTop) * 1024
 
@@ -435,7 +432,8 @@ export function LiveMap() {
 
               {showBases && basesWithPlayers.map((base) => {
                 const position = toScreenPercent([base.location_x, base.location_y])
-                const isUnknown = base.base_type === 'unknown'
+                // CORRECTION ICI : On détecte la base inconnue par son nom et plus par base_type === 'unknown'
+                const isUnknown = base.player_name === 'Base Inconnue'
                 const isMain = base.base_type === 'main'
                 const isActive = base.players && base.players.length > 0
                 const isSelected = selectedBase?.id === base.id
@@ -480,7 +478,6 @@ export function LiveMap() {
                       draggable={false} 
                     />
                     
-                    {/* Tooltip Classique (Caché si la carte est ouverte) */}
                     {!isSelected && (
                       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 pointer-events-none rounded-md bg-black/85 px-3 py-1.5 shadow-lg backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-30 flex flex-col items-center w-max">
                         <span className="text-xs font-bold text-white flex items-center gap-1.5">
@@ -498,18 +495,20 @@ export function LiveMap() {
                       </div>
                     )}
 
-                    {/* FICHE D'INFORMATION ANCREE A LA CARTE */}
+                    {/* FICHE D'INFORMATION CORRIGEE */}
                     {isSelected && (
                       <div 
                         className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 cursor-default animate-in fade-in zoom-in-95 duration-200"
-                        onClick={(e) => e.stopPropagation()} // Empêche de déclencher le clic du marqueur parent
+                        // CORRECTION ICI : On stop la propagation du mousedown pour éviter que la carte n'intercepte le clic !
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onMouseUp={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
                       >
                         <Card className="w-[300px] p-4 shadow-2xl shadow-black/50 border-white/10 bg-background/95 backdrop-blur-xl rounded-xl relative flex flex-col gap-3">
                           
-                          {/* Flèche directionnelle vers le haut */}
                           <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-background/95 border-l border-t border-white/10 rotate-45" />
 
-                          <button onClick={(e) => { e.stopPropagation(); setSelectedBase(null) }} className="absolute top-3 right-3 text-gray-400 hover:text-white transition-colors z-10">
+                          <button onClick={() => setSelectedBase(null)} className="absolute top-3 right-3 text-gray-400 hover:text-white transition-colors z-10">
                             <XIcon className="h-4 w-4" />
                           </button>
                           
@@ -518,14 +517,14 @@ export function LiveMap() {
                               <MapPinIcon className="h-5 w-5 text-primary" />
                             </div>
                             <div className="min-w-0">
-                              <h3 className="text-base font-bold truncate">{base.base_type === 'unknown' ? 'Base Inconnue' : base.player_name}</h3>
+                              <h3 className="text-base font-bold truncate">{isUnknown ? 'Base Inconnue' : base.player_name}</h3>
                               <p className="text-xs text-muted-foreground">
-                                {base.base_type === 'unknown' ? 'Non revendiquée' : base.base_type === 'main' ? 'Base Principale' : 'Base Secondaire'}
+                                {isUnknown ? 'Non revendiquée' : base.base_type === 'main' ? 'Base Principale' : 'Base Secondaire'}
                               </p>
                             </div>
                           </div>
 
-                          {base.base_type === 'unknown' ? (
+                          {isUnknown ? (
                             <div className="space-y-3 p-3 rounded-lg border border-primary/30 bg-primary/5 relative z-10">
                               <h4 className="text-xs font-bold text-primary">Revendiquer la base</h4>
                               <input type="text" className="flex h-9 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-xs focus:ring-2 focus:ring-primary outline-none" value={claimData.name} onChange={e => setClaimData({...claimData, name: e.target.value})} placeholder="Ton pseudo..." />
@@ -655,7 +654,6 @@ export function LiveMap() {
         </div>
       </div>
 
-      {/* FORMULAIRE NOUVELLE BASE (Création via Clic Droit) */}
       {newBaseCoords && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
           <Card className="w-full max-w-sm p-6 shadow-2xl border-white/10 bg-background/90 backdrop-blur-xl rounded-2xl">
@@ -689,7 +687,6 @@ export function LiveMap() {
         </div>
       )}
 
-      {/* FORMULAIRE BOSS VAINCU */}
       {isReportingBoss && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
           <Card className="w-full max-w-sm p-6 shadow-2xl border-red-500/30 bg-background/90 backdrop-blur-xl rounded-2xl">
