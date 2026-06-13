@@ -89,7 +89,6 @@ export function LiveMap() {
   const [bossTimers, setBossTimers] = useState<any[]>([])
   const [bases, setBases] = useState<any[]>([])
   
-  // Nouveaux états pour la gestion des bases
   const [isAddingBase, setIsAddingBase] = useState(false)
   const [newBaseCoords, setNewBaseCoords] = useState<{ x: number, y: number } | null>(null)
   const [formData, setFormData] = useState({ name: '', faction: '', type: 'main', isUnknown: false })
@@ -215,20 +214,25 @@ export function LiveMap() {
 
     const baseType = formData.isUnknown ? 'unknown' : formData.type
     const playerName = formData.isUnknown ? 'Base Inconnue' : formData.name
+    const guildName = formData.isUnknown ? null : formData.faction
 
     const { error } = await supabase.from('player_bases').insert([{
       player_name: playerName, 
-      guild_name: formData.faction, 
+      guild_name: guildName, // Sécurisé : Envoie null si non défini
       base_type: baseType, 
       location_x: newBaseCoords.x, 
       location_y: newBaseCoords.y
     }])
     
-    if (!error) {
-      setIsAddingBase(false); 
-      setNewBaseCoords(null); 
-      setFormData({ name: '', faction: '', type: 'main', isUnknown: false })
+    if (error) {
+      console.error("Erreur lors de la création :", error)
+      alert("Erreur lors de l'ajout de la base : " + error.message)
+      return
     }
+
+    setIsAddingBase(false); 
+    setNewBaseCoords(null); 
+    setFormData({ name: '', faction: '', type: 'main', isUnknown: false })
   }
 
   const handleClaimBase = async () => {
@@ -297,6 +301,19 @@ export function LiveMap() {
     setMousePosition([worldX, worldY])
   }, [])
 
+  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return 
+    event.preventDefault()
+    
+    // Ferme la fiche d'info si l'utilisateur commence à glisser la carte
+    if (selectedBase) {
+      setSelectedBase(null)
+    }
+
+    dragStartRef.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y }
+    setIsDragging(true)
+  }, [pan.x, pan.y, selectedBase])
+
   useEffect(() => {
     if (!isDragging) return
     const handleMouseMove = (event: MouseEvent) => {
@@ -360,12 +377,23 @@ export function LiveMap() {
       setZoom(newZoom)
     }, [zoom, pan])
 
-  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return 
-    event.preventDefault()
-    dragStartRef.current = { x: event.clientX, y: event.clientY, panX: pan.x, panY: pan.y }
-    setIsDragging(true)
-  }, [pan.x, pan.y])
+  // Fonction pour gérer le clic sur une base (Centrage + Ouverture fiche)
+  const handleBaseClick = (e: React.MouseEvent, base: any) => {
+    e.stopPropagation() // Empêche de déclencher le drag ou d'autres clics
+    setSelectedBase(base)
+
+    const [mapX, mapY] = toMapPosition([base.location_x, base.location_y])
+    
+    // Calcul de la distance pour centrer le point
+    const percentLeft = mapY / 256
+    const percentTop = -mapX / 256
+    
+    // 1024 est la largeur/hauteur interne définie pour la carte
+    const targetPanX = (0.5 - percentLeft) * 1024
+    const targetPanY = (0.5 - percentTop) * 1024
+
+    setPan({ x: targetPanX, y: targetPanY })
+  }
 
   const activeBossTimers = bossTimers.filter(t => new Date(t.respawn_time) > new Date())
 
@@ -394,7 +422,7 @@ export function LiveMap() {
             onContextMenu={(e) => { if (isAddingBase || movingBaseId) e.preventDefault() }}
           >
             <div
-              ref={mapPlaneRef} className="absolute left-1/2 top-1/2 will-change-transform"
+              ref={mapPlaneRef} className="absolute left-1/2 top-1/2 will-change-transform transition-transform duration-300 ease-out"
               style={{ width: '1024px', height: '1024px', transform: `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${scale})`, transformOrigin: 'center center' }}
             >
               <img src={MAP_IMAGE_URL} alt="Carte du monde Palworld" className="block h-full w-full select-none" draggable={false} />
@@ -410,9 +438,15 @@ export function LiveMap() {
                 const isUnknown = base.base_type === 'unknown'
                 const isMain = base.base_type === 'main'
                 const isActive = base.players && base.players.length > 0
+                const isSelected = selectedBase?.id === base.id
 
                 return (
-                  <div key={base.id} className="absolute z-20 cursor-pointer group" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onClick={() => setSelectedBase(base)}>
+                  <div 
+                    key={base.id} 
+                    className={`absolute cursor-pointer group ${isSelected ? 'z-[60]' : 'z-20'}`} 
+                    style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} 
+                    onClick={(e) => handleBaseClick(e, base)}
+                  >
                     
                     {isActive && (
                       <div className="absolute z-50 bottom-full mb-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/90 backdrop-blur-md px-2 py-1 rounded-md border border-green-500/50 shadow-2xl whitespace-nowrap pointer-events-none">
@@ -446,25 +480,85 @@ export function LiveMap() {
                       draggable={false} 
                     />
                     
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 pointer-events-none rounded-md bg-black/85 px-3 py-1.5 shadow-lg backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-30 flex flex-col items-center w-max">
-                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                        {isUnknown ? 'Base Inconnue' : base.player_name}
-                        {!isUnknown && <span className="text-gray-400 text-[10px] font-normal">({isMain ? 'Principale' : 'Secondaire'})</span>}
-                      </span>
-                      
-                      {isActive && (
-                        <div className="mt-1 pt-1 border-t border-white/10 w-full flex flex-col items-center">
-                          <span className="text-[10px] text-green-400 font-semibold mb-0.5">🟢 {base.players.length} Joueur(s) dans la base</span>
-                          {base.players.map((p: any) => <span key={p.name} className="text-[9px] text-gray-300">{p.name}</span>)}
-                        </div>
-                      )}
-                      <span className="mt-1.5 text-[9px] text-primary/80 font-normal italic">Clic pour voir la fiche</span>
-                    </div>
+                    {/* Tooltip Classique (Caché si la carte est ouverte) */}
+                    {!isSelected && (
+                      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 mt-2 pointer-events-none rounded-md bg-black/85 px-3 py-1.5 shadow-lg backdrop-blur-sm border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity z-30 flex flex-col items-center w-max">
+                        <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                          {isUnknown ? 'Base Inconnue' : base.player_name}
+                          {!isUnknown && <span className="text-gray-400 text-[10px] font-normal">({isMain ? 'Principale' : 'Secondaire'})</span>}
+                        </span>
+                        
+                        {isActive && (
+                          <div className="mt-1 pt-1 border-t border-white/10 w-full flex flex-col items-center">
+                            <span className="text-[10px] text-green-400 font-semibold mb-0.5">🟢 {base.players.length} Joueur(s) dans la base</span>
+                            {base.players.map((p: any) => <span key={p.name} className="text-[9px] text-gray-300">{p.name}</span>)}
+                          </div>
+                        )}
+                        <span className="mt-1.5 text-[9px] text-primary/80 font-normal italic">Clic pour voir la fiche</span>
+                      </div>
+                    )}
+
+                    {/* FICHE D'INFORMATION ANCREE A LA CARTE */}
+                    {isSelected && (
+                      <div 
+                        className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 cursor-default animate-in fade-in zoom-in-95 duration-200"
+                        onClick={(e) => e.stopPropagation()} // Empêche de déclencher le clic du marqueur parent
+                      >
+                        <Card className="w-[300px] p-4 shadow-2xl shadow-black/50 border-white/10 bg-background/95 backdrop-blur-xl rounded-xl relative flex flex-col gap-3">
+                          
+                          {/* Flèche directionnelle vers le haut */}
+                          <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 bg-background/95 border-l border-t border-white/10 rotate-45" />
+
+                          <button onClick={(e) => { e.stopPropagation(); setSelectedBase(null) }} className="absolute top-3 right-3 text-gray-400 hover:text-white transition-colors z-10">
+                            <XIcon className="h-4 w-4" />
+                          </button>
+                          
+                          <div className="flex items-center gap-3 relative z-10">
+                            <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
+                              <MapPinIcon className="h-5 w-5 text-primary" />
+                            </div>
+                            <div className="min-w-0">
+                              <h3 className="text-base font-bold truncate">{base.base_type === 'unknown' ? 'Base Inconnue' : base.player_name}</h3>
+                              <p className="text-xs text-muted-foreground">
+                                {base.base_type === 'unknown' ? 'Non revendiquée' : base.base_type === 'main' ? 'Base Principale' : 'Base Secondaire'}
+                              </p>
+                            </div>
+                          </div>
+
+                          {base.base_type === 'unknown' ? (
+                            <div className="space-y-3 p-3 rounded-lg border border-primary/30 bg-primary/5 relative z-10">
+                              <h4 className="text-xs font-bold text-primary">Revendiquer la base</h4>
+                              <input type="text" className="flex h-9 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-xs focus:ring-2 focus:ring-primary outline-none" value={claimData.name} onChange={e => setClaimData({...claimData, name: e.target.value})} placeholder="Ton pseudo..." />
+                              <select className="flex h-9 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-xs focus:ring-2 focus:ring-primary outline-none" value={claimData.type} onChange={e => setClaimData({...claimData, type: e.target.value})}>
+                                <option value="main">⭐ Base Principale</option>
+                                <option value="sub_1">🏠 Base Secondaire</option>
+                              </select>
+                              <Button size="sm" className="w-full rounded-lg h-8 text-xs" onClick={handleClaimBase} disabled={!claimData.name}>Claim !</Button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 relative z-10">
+                              <div className="p-3 rounded-lg border border-white/5 bg-white/5 text-center text-xs text-gray-400">
+                                <p>Historique des visites</p>
+                                <span className="text-[10px] italic">(Bientôt disponible)</span>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex gap-2 justify-between pt-3 border-t border-white/10 relative z-10">
+                            <Button variant="ghost" size="sm" className="rounded-lg hover:bg-red-500/20 text-red-400 hover:text-red-300 gap-1.5 flex-1 h-8 text-xs" onClick={() => handleDeleteBase(base.id, base.player_name)}>
+                              <TrashIcon className="h-3 w-3" /> Suppr.
+                            </Button>
+                            <Button variant="secondary" size="sm" className="rounded-lg gap-1.5 flex-1 bg-white/10 hover:bg-white/20 h-8 text-xs" onClick={startMovingBase}>
+                              <MoveIcon className="h-3 w-3" /> Déplacer
+                            </Button>
+                          </div>
+                        </Card>
+                      </div>
+                    )}
                   </div>
                 )
               })}
 
-              {/* ... (Reste des marqueurs Boss / Players inchangés) ... */}
               {showBossTowers && bossTowerMarkers.map((point) => (
                 <div key={point.key} className="absolute z-20 flex flex-col items-center justify-center cursor-pointer group" style={{ ...point.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
                   <img src="/palworld-map/boss_tower.webp" alt="Tour" className="h-10 w-10 select-none object-contain transition-transform group-hover:scale-110 drop-shadow-xl" draggable={false} />
@@ -477,12 +571,12 @@ export function LiveMap() {
                 
                 return (
                   <div key={cluster.id} 
-      className="absolute z-30 flex flex-col items-center group pointer-events-auto" 
-      style={{ 
-        ...position, 
-        transform: `translate(-50%, -50%) scale(${1 / scale})`,
-        transition: 'left 5s linear, top 5s linear' 
-      }}>
+                    className="absolute z-30 flex flex-col items-center group pointer-events-auto" 
+                    style={{ 
+                      ...position, 
+                      transform: `translate(-50%, -50%) scale(${1 / scale})`,
+                      transition: 'left 5s linear, top 5s linear' 
+                    }}>
                     <div className="absolute bottom-full mb-1 pointer-events-none z-10 flex flex-col items-center justify-center rounded-md border border-primary/30 bg-background/80 px-2 py-1 shadow-lg backdrop-blur-sm transition-transform duration-300 group-hover:scale-110">
                       {isGroup ? (
                         <>
@@ -501,7 +595,6 @@ export function LiveMap() {
           </div>
         </div>
 
-        {/* Panneau latéral et boutons de zoom inchangés */}
         <div className="absolute bottom-6 right-6 z-50 flex flex-col gap-2">
           <Card className="bg-background/70 backdrop-blur-xl border-white/10 shadow-2xl overflow-hidden flex flex-col">
             <Button variant="ghost" size="icon" className="h-10 w-10 rounded-none hover:bg-white/10" onClick={() => setZoom(z => clamp(z + 1, MIN_ZOOM, MAX_ZOOM))}><ZoomInIcon className="h-5 w-5" /></Button>
@@ -533,7 +626,7 @@ export function LiveMap() {
               </Button>
             </div>
           </Card>
-          {/* ... Liste des Boss en attente inchangée ... */}
+          
           {activeBossTimers.length > 0 && (
             <Card className="pointer-events-auto border-white/10 bg-background/60 p-0 text-foreground shadow-2xl backdrop-blur-xl rounded-2xl overflow-hidden flex flex-col">
               <div className="p-4 border-b border-white/10 bg-gradient-to-r from-red-900/20 to-transparent flex items-center justify-between">
@@ -562,62 +655,7 @@ export function LiveMap() {
         </div>
       </div>
 
-      {/* FENETRE INFORMATION DE LA BASE AU CLIC */}
-      {selectedBase && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
-          <Card className="w-full max-w-sm p-6 shadow-2xl border-white/10 bg-background/90 backdrop-blur-xl rounded-2xl relative">
-            <button onClick={() => setSelectedBase(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors">
-              <XIcon className="h-5 w-5" />
-            </button>
-            
-            <div className="flex items-center gap-3 mb-6">
-              <div className="h-12 w-12 rounded-xl bg-primary/20 flex items-center justify-center">
-                <MapPinIcon className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold">{selectedBase.base_type === 'unknown' ? 'Base Inconnue' : selectedBase.player_name}</h3>
-                <p className="text-sm text-muted-foreground">
-                  {selectedBase.base_type === 'unknown' ? 'Non revendiquée' : selectedBase.base_type === 'main' ? 'Base Principale' : 'Base Secondaire'}
-                </p>
-              </div>
-            </div>
-
-            {selectedBase.base_type === 'unknown' ? (
-              <div className="space-y-4 mb-6 p-4 rounded-xl border border-primary/30 bg-primary/5">
-                <h4 className="text-sm font-bold text-primary">Revendiquer la base</h4>
-                <input type="text" className="flex h-11 w-full rounded-xl border border-white/10 bg-black/40 px-4 text-sm focus:ring-2 focus:ring-primary outline-none" value={claimData.name} onChange={e => setClaimData({...claimData, name: e.target.value})} placeholder="Ton pseudo..." />
-                <select className="flex h-11 w-full rounded-xl border border-white/10 bg-black/40 px-4 text-sm focus:ring-2 focus:ring-primary outline-none" value={claimData.type} onChange={e => setClaimData({...claimData, type: e.target.value})}>
-                  <option value="main">⭐ Base Principale</option>
-                  <option value="sub_1">🏠 Base Secondaire</option>
-                </select>
-                <Button className="w-full rounded-xl" onClick={handleClaimBase} disabled={!claimData.name}>Claim !</Button>
-              </div>
-            ) : (
-              <div className="space-y-4 mb-6">
-                <div className="p-4 rounded-xl border border-white/5 bg-white/5 text-center text-sm text-gray-400">
-                  <p>Historique des visites</p>
-                  <span className="text-xs italic">(Bientôt disponible)</span>
-                </div>
-                <div className="p-4 rounded-xl border border-white/5 bg-white/5 text-center text-sm text-gray-400">
-                  <p>Système de Votes</p>
-                  <span className="text-xs italic">(Bientôt disponible)</span>
-                </div>
-              </div>
-            )}
-
-            <div className="flex gap-3 justify-between pt-4 border-t border-white/10">
-              <Button variant="ghost" className="rounded-xl hover:bg-red-500/20 text-red-400 hover:text-red-300 gap-2 flex-1" onClick={() => handleDeleteBase(selectedBase.id, selectedBase.player_name)}>
-                <TrashIcon className="h-4 w-4" /> Suppr.
-              </Button>
-              <Button variant="secondary" className="rounded-xl gap-2 flex-1 bg-white/10 hover:bg-white/20" onClick={startMovingBase}>
-                <MoveIcon className="h-4 w-4" /> Déplacer
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* FORMULAIRE NOUVELLE BASE MODIFIE */}
+      {/* FORMULAIRE NOUVELLE BASE (Création via Clic Droit) */}
       {newBaseCoords && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
           <Card className="w-full max-w-sm p-6 shadow-2xl border-white/10 bg-background/90 backdrop-blur-xl rounded-2xl">
@@ -651,7 +689,7 @@ export function LiveMap() {
         </div>
       )}
 
-      {/* Formulaire Boss inchangé */}
+      {/* FORMULAIRE BOSS VAINCU */}
       {isReportingBoss && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-md p-4">
           <Card className="w-full max-w-sm p-6 shadow-2xl border-red-500/30 bg-background/90 backdrop-blur-xl rounded-2xl">
