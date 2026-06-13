@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MapPinIcon, ZoomInIcon, ZoomOutIcon, CrosshairIcon, SwordsIcon, BellIcon, TrashIcon, XIcon, MoveIcon, StarIcon, MessageSquareIcon, ClockIcon, UserIcon, LogOutIcon } from 'lucide-react'
+import { MapPinIcon, ZoomInIcon, ZoomOutIcon, CrosshairIcon, SwordsIcon, BellIcon, TrashIcon, XIcon, MoveIcon, StarIcon, MessageSquareIcon, ClockIcon, UserIcon, LogOutIcon, PlusIcon, FilterIcon, PencilIcon, CheckIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -85,6 +85,9 @@ export function LiveMap() {
   const [showBases, setShowBases] = useState(true)
   
   const [isDragging, setIsDragging] = useState(false)
+
+  const [knownPlayers, setKnownPlayers] = useState<{ player_uid: string, name: string, claimed_by: boolean }[]>([]);
+  const [isLoadingPlayers, setIsLoadingPlayers] = useState(true)
   
   const [bossTimers, setBossTimers] = useState<any[]>([])
   const [bases, setBases] = useState<any[]>([])
@@ -100,12 +103,16 @@ export function LiveMap() {
   const [isReportingBoss, setIsReportingBoss] = useState(false)
   const [bossFormName, setBossFormName] = useState('')
 
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false)
+  const [isBossListOpen, setIsBossListOpen] = useState(false)
+
   // NOUVEAUX ETATS POUR LE SYSTEME DE COMPTE ET LA FICHE BASE
-  const [currentUser, setCurrentUser] = useState<{ name: string, isGuest: boolean } | null>(null)
-  const [loginInputName, setLoginInputName] = useState('')
+  const [currentUser, setCurrentUser] = useState<{ name: string, isGuest: boolean, player_uid?: string } | null>(null)
   const [activeTab, setActiveTab] = useState<'info' | 'reviews' | 'history'>('info')
   const [baseDetails, setBaseDetails] = useState<{ reviews: any[], ratings: any[], visits: any[] }>({ reviews: [], ratings: [], visits: [] })
   const [newReview, setNewReview] = useState('')
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null)
+  const [editingReviewContent, setEditingReviewContent] = useState('')
   
   const dragStartRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
   const mapPlaneRef = useRef<HTMLDivElement | null>(null)
@@ -122,14 +129,41 @@ export function LiveMap() {
     }
   }, [])
 
-  const handleLogin = (isGuest: boolean) => {
-    if (!isGuest && !loginInputName.trim()) return
-    const user = { name: isGuest ? 'Invité' : loginInputName.trim(), isGuest }
+  // CHARGEMENT DE LA LISTE DES JOUEURS CONNUS (NON ENCORE CLAIM)
+  const fetchKnownPlayers = useCallback(async () => {
+    setIsLoadingPlayers(true)
+    const { data } = await supabase.from('known_players').select('player_uid, name, claimed_by').order('name', { ascending: true })
+    if (data) setKnownPlayers(data as any)
+    setIsLoadingPlayers(false)
+  }, [])
+
+  useEffect(() => {
+    if (!currentUser) fetchKnownPlayers()
+  }, [currentUser, fetchKnownPlayers])
+
+  // CONNEXION EN CHOISISSANT UN JOUEUR DE LA BDD
+  const handleLoginAsPlayer = async (player: { player_uid: string, name: string }) => {
+    const { error } = await supabase.from('known_players').update({ claimed_by: true }).eq('player_uid', player.player_uid)
+    if (error) {
+      alert("Erreur lors de la connexion : " + error.message)
+      return
+    }
+    const user = { name: player.name, isGuest: false, player_uid: player.player_uid }
     setCurrentUser(user)
     localStorage.setItem('palworld_livemap_user', JSON.stringify(user))
   }
 
-  const handleLogout = () => {
+  const handleLoginAsGuest = () => {
+    const user = { name: 'Invité', isGuest: true }
+    setCurrentUser(user)
+    localStorage.setItem('palworld_livemap_user', JSON.stringify(user))
+  }
+
+  const handleLogout = async () => {
+    // On libère le pseudo pour qu'il réapparaisse dans la liste de connexion
+    if (currentUser && !currentUser.isGuest && currentUser.player_uid) {
+      await supabase.from('known_players').update({ claimed_by: false }).eq('player_uid', currentUser.player_uid)
+    }
     setCurrentUser(null)
     localStorage.removeItem('palworld_livemap_user')
   }
@@ -277,6 +311,32 @@ export function LiveMap() {
     setFormData({ name: '', faction: '', type: 'main', isUnknown: false })
   }
 
+  const cancelAddingBase = () => {
+    setIsAddingBase(false); setNewBaseCoords(null)
+    setFormData({ name: '', faction: '', type: 'main', isUnknown: false })
+  }
+
+  const handleReportBoss = async () => {
+    if (!bossFormName.trim()) return
+    const bossKey = bossFormName.trim().toLowerCase().replace(/\s+/g, '_')
+    const respawnTime = new Date(Date.now() + BOSS_RESPAWN_TIME_MS).toISOString()
+    const { error } = await supabase.from('boss_timers').upsert({
+      boss_key: bossKey,
+      name: bossFormName.trim(),
+      respawn_time: respawnTime,
+      notified_respawn: false
+    }, { onConflict: 'boss_key' })
+    if (error) {
+      alert("Erreur lors du signalement du boss : " + error.message)
+      return
+    }
+    setIsReportingBoss(false); setBossFormName('')
+  }
+
+  const handleDeleteBossTimer = async (id: string) => {
+    await supabase.from('boss_timers').delete().eq('id', id)
+  }
+
   const handleClaimBase = async () => {
     if (!selectedBase || !claimData.name) return
     const { error } = await supabase.from('player_bases').update({ player_name: claimData.name, base_type: claimData.type }).eq('id', selectedBase.id)
@@ -309,6 +369,31 @@ export function LiveMap() {
     await supabase.from('base_reviews').insert([{ base_id: selectedBase.id, player_name: currentUser.name, content: newReview.trim() }])
     setNewReview('')
     fetchBaseDetails(selectedBase.id) // Refresh
+  }
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!selectedBase) return
+    if (!window.confirm("Supprimer cet avis ?")) return
+    await supabase.from('base_reviews').delete().eq('id', reviewId)
+    fetchBaseDetails(selectedBase.id)
+  }
+
+  const startEditingReview = (review: any) => {
+    setEditingReviewId(review.id)
+    setEditingReviewContent(review.content)
+  }
+
+  const cancelEditingReview = () => {
+    setEditingReviewId(null)
+    setEditingReviewContent('')
+  }
+
+  const handleUpdateReview = async () => {
+    if (!selectedBase || !editingReviewId || !editingReviewContent.trim()) return
+    await supabase.from('base_reviews').update({ content: editingReviewContent.trim() }).eq('id', editingReviewId)
+    setEditingReviewId(null)
+    setEditingReviewContent('')
+    fetchBaseDetails(selectedBase.id)
   }
 
   const handleMapClick = useCallback(async (event: React.MouseEvent<HTMLDivElement>) => {
@@ -382,39 +467,44 @@ export function LiveMap() {
 
   // -- RENDU DU MODAL DE CONNEXION INITIAL --
   if (!currentUser) {
+    const availablePlayers = knownPlayers.filter(p => !p.claimed_by)
     return (
       <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/90 backdrop-blur-xl">
-        <Card className="w-full max-w-md p-8 border-white/10 bg-background/80 flex flex-col items-center gap-6 text-center">
+        <Card className="w-full max-w-md p-8 border-white/10 bg-background/80 flex flex-col items-center gap-6 text-center max-h-[85vh]">
           <div className="h-16 w-16 bg-primary/20 rounded-full flex items-center justify-center text-primary mb-2">
             <UserIcon className="h-8 w-8" />
           </div>
           <div>
             <h2 className="text-2xl font-bold mb-2">Qui es-tu ?</h2>
-            <p className="text-sm text-muted-foreground">Identifie-toi pour pouvoir voter et laisser des avis sur les bases de la map.</p>
+            <p className="text-sm text-muted-foreground">Choisis ton pseudo dans la liste pour pouvoir voter et laisser des avis sur les bases de la map. Si tu n'y es pas, c'est que tu dois te connecter au moins une fois sur le serveur.</p>
           </div>
           
-          <div className="w-full space-y-4">
-            <input 
-              type="text" 
-              placeholder="Ton pseudo en jeu..." 
-              className="flex h-12 w-full rounded-xl border border-white/10 bg-black/40 px-4 text-center text-lg focus:ring-2 focus:ring-primary outline-none"
-              value={loginInputName}
-              onChange={(e) => setLoginInputName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleLogin(false)}
-              autoFocus
-            />
-            <Button className="w-full h-12 text-md rounded-xl shadow-lg shadow-primary/20" onClick={() => handleLogin(false)} disabled={!loginInputName.trim()}>
-              Se connecter
-            </Button>
-            <div className="flex items-center gap-4 my-2">
-              <div className="h-[1px] flex-1 bg-white/10" />
-              <span className="text-xs text-muted-foreground uppercase tracking-widest">Ou</span>
-              <div className="h-[1px] flex-1 bg-white/10" />
-            </div>
-            <Button variant="secondary" className="w-full h-12 text-md rounded-xl bg-white/5 hover:bg-white/10" onClick={() => handleLogin(true)}>
-              Continuer en Invité
-            </Button>
+          <div className="w-full space-y-3 overflow-y-auto custom-scrollbar flex-1 min-h-0 pr-1">
+            {isLoadingPlayers ? (
+              <p className="text-sm text-muted-foreground py-6">Chargement des joueurs...</p>
+            ) : availablePlayers.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6">Aucun joueur disponible. Connecte-toi sur le serveur au moins une fois pour apparaître ici.</p>
+            ) : (
+              availablePlayers.map(player => (
+                <button
+                  key={player.player_uid}
+                  onClick={() => handleLoginAsPlayer(player)}
+                  className="flex h-12 w-full items-center justify-center rounded-xl border border-white/10 bg-black/40 px-4 text-center text-lg hover:bg-primary/20 hover:border-primary transition-colors outline-none"
+                >
+                  {player.name}
+                </button>
+              ))
+            )}
           </div>
+
+          <div className="flex items-center gap-4 my-1 w-full">
+            <div className="h-[1px] flex-1 bg-white/10" />
+            <span className="text-xs text-muted-foreground uppercase tracking-widest">Ou</span>
+            <div className="h-[1px] flex-1 bg-white/10" />
+          </div>
+          <Button variant="secondary" className="w-full h-12 text-md rounded-xl bg-white/5 hover:bg-white/10" onClick={handleLoginAsGuest}>
+            Continuer en Invité
+          </Button>
         </Card>
       </div>
     )
@@ -445,6 +535,169 @@ export function LiveMap() {
           </div>
         )}
 
+        {movingBaseId && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 bg-orange-600 text-white px-6 py-2 rounded-full font-bold shadow-lg animate-pulse border border-orange-400">
+            🖱️ Clic droit pour déplacer la base — (Echap pour annuler)
+          </div>
+        )}
+
+        {/* BARRE D'OUTILS HAUT GAUCHE */}
+        <div className="absolute top-4 left-4 z-40 flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant={isFilterPanelOpen ? 'default' : 'secondary'}
+              className="rounded-xl gap-1.5 bg-black/70 hover:bg-black/90 border border-white/10 shadow-lg"
+              onClick={() => setIsFilterPanelOpen(v => !v)}
+            >
+              <FilterIcon className="h-4 w-4" /> Filtres
+            </Button>
+
+            {!currentUser.isGuest && (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="rounded-xl gap-1.5 bg-black/70 hover:bg-black/90 border border-white/10 shadow-lg"
+                onClick={() => { setIsAddingBase(true); setNewBaseCoords(null); setSelectedBase(null) }}
+                disabled={isAddingBase || !!movingBaseId}
+              >
+                <PlusIcon className="h-4 w-4" /> Ajouter une base
+              </Button>
+            )}
+
+            {!currentUser.isGuest && (
+              <Button
+                size="sm"
+                variant="secondary"
+                className="rounded-xl gap-1.5 bg-black/70 hover:bg-black/90 border border-white/10 shadow-lg"
+                onClick={() => setIsReportingBoss(true)}
+              >
+                <SwordsIcon className="h-4 w-4" /> Signaler un boss
+              </Button>
+            )}
+
+            <Button
+              size="sm"
+              variant={isBossListOpen ? 'default' : 'secondary'}
+              className="rounded-xl gap-1.5 bg-black/70 hover:bg-black/90 border border-white/10 shadow-lg"
+              onClick={() => setIsBossListOpen(v => !v)}
+            >
+              <BellIcon className="h-4 w-4" /> Boss ({activeBossTimers.length})
+            </Button>
+          </div>
+
+          {/* PANNEAU DE FILTRES */}
+          {isFilterPanelOpen && (
+            <Card className="w-56 p-3 bg-black/80 backdrop-blur-xl border-white/10 shadow-2xl rounded-xl">
+              <ControlRow label="Joueurs" checked={showPlayers} onCheckedChange={setShowPlayers} />
+              <ControlRow label="Bases" checked={showBases} onCheckedChange={setShowBases} />
+              <ControlRow label="Tours de boss" checked={showBossTowers} onCheckedChange={setShowBossTowers} />
+              <ControlRow label="Téléporteurs" checked={showFastTravels} onCheckedChange={setShowFastTravels} />
+            </Card>
+          )}
+
+          {/* LISTE DES BOSS ACTIFS */}
+          {isBossListOpen && (
+            <Card className="w-64 p-3 bg-black/80 backdrop-blur-xl border-white/10 shadow-2xl rounded-xl max-h-72 overflow-y-auto custom-scrollbar">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5"><SwordsIcon className="h-3.5 w-3.5" /> Respawn des boss</h4>
+              {activeBossTimers.length === 0 ? (
+                <p className="text-xs text-gray-500 text-center py-2">Aucun boss signalé récemment.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {activeBossTimers.map(timer => (
+                    <div key={timer.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-white/5 text-xs">
+                      <span className="font-semibold truncate">{timer.name}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-yellow-400 font-mono"><LiveCountdown targetDate={timer.respawn_time} /></span>
+                        {!currentUser.isGuest && (
+                          <button onClick={() => handleDeleteBossTimer(timer.id)} className="text-gray-500 hover:text-red-400 transition-colors" title="Retirer">
+                            <XIcon className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+
+        {/* FORMULAIRE D'AJOUT DE BASE */}
+        {isAddingBase && newBaseCoords && (
+          <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/60" onMouseDown={(e) => e.stopPropagation()}>
+            <Card className="w-full max-w-sm p-5 border-white/10 bg-background/95 backdrop-blur-xl rounded-xl shadow-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-bold flex items-center gap-2"><MapPinIcon className="h-4 w-4 text-primary" /> Nouvelle base</h3>
+                <button onClick={cancelAddingBase} className="text-gray-400 hover:text-white"><XIcon className="h-4 w-4" /></button>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">Position : X {newBaseCoords.x.toFixed(0)} / Y {newBaseCoords.y.toFixed(0)}</p>
+
+              <ControlRow label="Base inconnue (non revendiquée)" checked={formData.isUnknown} onCheckedChange={(v) => setFormData({ ...formData, isUnknown: v })} />
+
+              {!formData.isUnknown && (
+                <div className="space-y-2 mt-2">
+                  <input type="text" placeholder="Pseudo du propriétaire" className="flex h-9 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-sm focus:ring-2 focus:ring-primary outline-none" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                  <input type="text" placeholder="Guilde (optionnel)" className="flex h-9 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-sm focus:ring-2 focus:ring-primary outline-none" value={formData.faction} onChange={e => setFormData({ ...formData, faction: e.target.value })} />
+                  <select className="flex h-9 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-sm focus:ring-2 focus:ring-primary outline-none" value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })}>
+                    <option value="main">⭐ Base Principale</option>
+                    <option value="sub_1">🏠 Base Secondaire 1</option>
+                    <option value="sub_2">🏠 Base Secondaire 2</option>
+                    <option value="sub_3">🏠 Base Secondaire 3</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-4">
+                <Button variant="secondary" className="flex-1 rounded-lg" onClick={cancelAddingBase}>Annuler</Button>
+                <Button className="flex-1 rounded-lg" onClick={saveBase} disabled={!formData.isUnknown && !formData.name.trim()}>Enregistrer</Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* FORMULAIRE DE SIGNALEMENT DE BOSS */}
+        {isReportingBoss && (
+          <div className="absolute inset-0 z-[80] flex items-center justify-center bg-black/60" onMouseDown={(e) => e.stopPropagation()}>
+            <Card className="w-full max-w-sm p-5 border-white/10 bg-background/95 backdrop-blur-xl rounded-xl shadow-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-bold flex items-center gap-2"><SwordsIcon className="h-4 w-4 text-primary" /> Signaler un boss tué</h3>
+                <button onClick={() => { setIsReportingBoss(false); setBossFormName('') }} className="text-gray-400 hover:text-white"><XIcon className="h-4 w-4" /></button>
+              </div>
+              <p className="text-xs text-muted-foreground mb-3">Le minuteur de respawn (1h) démarrera dès la confirmation.</p>
+              <input
+                type="text"
+                placeholder="Nom du boss..."
+                className="flex h-10 w-full rounded-lg border border-white/10 bg-black/40 px-3 text-sm focus:ring-2 focus:ring-primary outline-none"
+                value={bossFormName}
+                onChange={e => setBossFormName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleReportBoss()}
+                autoFocus
+              />
+              <div className="flex gap-2 mt-4">
+                <Button variant="secondary" className="flex-1 rounded-lg" onClick={() => { setIsReportingBoss(false); setBossFormName('') }}>Annuler</Button>
+                <Button className="flex-1 rounded-lg" onClick={handleReportBoss} disabled={!bossFormName.trim()}>Confirmer</Button>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        {/* COORDONNEES SOURIS BAS DROIT */}
+        <div className="absolute bottom-4 right-4 z-40 flex items-center gap-2">
+          <div className="flex items-center gap-2 bg-black/70 backdrop-blur-xl border border-white/10 px-3 py-1.5 rounded-full text-[11px] font-mono text-muted-foreground shadow-lg">
+            <CrosshairIcon className="h-3 w-3" /> X: {mousePosition[0]} / Y: {mousePosition[1]}
+          </div>
+          <div className="flex items-center bg-black/70 backdrop-blur-xl border border-white/10 rounded-full shadow-lg overflow-hidden">
+            <button onClick={() => setZoom(z => clamp(z - 1, MIN_ZOOM, MAX_ZOOM))} className="p-2 hover:bg-white/10 transition-colors" title="Zoom -">
+              <ZoomOutIcon className="h-4 w-4" />
+            </button>
+            <button onClick={() => setZoom(z => clamp(z + 1, MIN_ZOOM, MAX_ZOOM))} className="p-2 hover:bg-white/10 transition-colors" title="Zoom +">
+              <ZoomInIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+
+
         <div className="relative flex-1 w-full h-full overflow-hidden bg-[#1e2329]">
           <div
             className={`relative h-full w-full overflow-hidden ${(isAddingBase && !newBaseCoords) || movingBaseId ? 'cursor-crosshair' : isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
@@ -459,8 +712,30 @@ export function LiveMap() {
             >
               <img src={MAP_IMAGE_URL} alt="Carte du monde Palworld" className="block h-full w-full select-none" draggable={false} />
 
-              {/* POINTS FIXES ET JOUEURS (Gardés intacts pour abréger l'exemple) */}
+              {/* POINTS FIXES ET JOUEURS */}
               {showFastTravels && fastTravelMarkers.map((m) => (<div key={m.key} className="absolute z-10" style={{ ...m.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}><img src="/palworld-map/fast_travel.webp" alt="Fast Travel" className="h-6 w-6 drop-shadow-md" draggable={false} /></div>))}
+
+              {showBossTowers && bossTowerMarkers.map((m) => (
+                <div key={m.key} className="absolute z-10" style={{ ...m.position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
+                  <img src="/palworld-map/boss_tower.webp" alt="Tour de Boss" className="h-7 w-7 drop-shadow-md" draggable={false} />
+                </div>
+              ))}
+
+              {showPlayers && clusteredPlayers.map((cluster) => {
+                const position = toScreenPercent([cluster.x, cluster.y])
+                return (
+                  <div key={cluster.id} className="absolute z-30 pointer-events-none" style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }}>
+                    <div className="relative flex flex-col items-center">
+                      <div className="h-3 w-3 rounded-full bg-green-400 border-2 border-white shadow-[0_0_8px_rgba(74,222,128,0.8)] animate-pulse" />
+                      <div className="mt-1 rounded-md bg-black/85 px-2 py-1 shadow-lg border border-white/10 flex flex-col items-center whitespace-nowrap">
+                        {cluster.players.map((p: any) => (
+                          <span key={getPlayerKey(p)} className="text-[10px] font-bold text-white">{p.name}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
 
               {showBases && basesWithPlayers.map((base) => {
                 const position = toScreenPercent([base.location_x, base.location_y])
@@ -468,9 +743,10 @@ export function LiveMap() {
                 const isMain = base.base_type === 'main'
                 const isSelected = selectedBase?.id === base.id
                 
-                // Calcul moyenne étoile pour la vignette
-                const myRating = baseDetails.ratings.find(r => r.player_name === currentUser.name)?.rating || 0;
-                const avgRating = baseDetails.ratings.length > 0 ? (baseDetails.ratings.reduce((a,b)=>a+b.rating,0) / baseDetails.ratings.length).toFixed(1) : 0;
+                // Calcul moyenne étoile pour la vignette (uniquement les notes de CETTE base)
+                const baseRatings = isSelected ? baseDetails.ratings.filter(r => r.base_id === base.id) : []
+                const myRating = isSelected ? (baseRatings.find(r => r.player_name === currentUser.name)?.rating || 0) : 0;
+                const avgRating = isSelected && baseRatings.length > 0 ? (baseRatings.reduce((a,b)=>a+b.rating,0) / baseRatings.length).toFixed(1) : 0;
 
                 return (
                   <div key={base.id} className={`absolute cursor-pointer group ${isSelected ? 'z-[60]' : 'z-20'}`} style={{ ...position, transform: `translate(-50%, -50%) scale(${1 / scale})` }} onClick={(e) => handleBaseClick(e, base)}>
@@ -557,14 +833,47 @@ export function LiveMap() {
                                     <p className="text-xs text-center text-gray-500 py-4">Aucun message pour le moment.</p>
                                   ) : (
                                     baseDetails.reviews.map(rev => {
-                                      const isOwner = rev.player_name.toLowerCase() === base.player_name.toLowerCase()
+                                      const isBaseOwner = rev.player_name.toLowerCase() === base.player_name.toLowerCase()
+                                      const isMyReview = !currentUser.isGuest && rev.player_name.toLowerCase() === currentUser.name.toLowerCase()
+                                      const isEditing = editingReviewId === rev.id
                                       return (
-                                        <div key={rev.id} className={`p-2.5 rounded-lg text-xs border ${isOwner ? 'border-yellow-500/30 bg-yellow-500/10' : 'border-white/5 bg-white/5'}`}>
+                                        <div key={rev.id} className={`p-2.5 rounded-lg text-xs border ${isBaseOwner ? 'border-yellow-500/30 bg-yellow-500/10' : 'border-white/5 bg-white/5'}`}>
                                           <div className="flex justify-between items-center mb-1">
-                                            <span className={`font-bold ${isOwner ? 'text-yellow-400' : 'text-gray-300'}`}>{rev.player_name} {isOwner && '👑'}</span>
-                                            <span className="text-[9px] text-gray-500">{new Date(rev.created_at).toLocaleDateString('fr-FR', {timeZone: 'Europe/Paris', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'})}</span>
+                                            <span className={`font-bold ${isBaseOwner ? 'text-yellow-400' : 'text-gray-300'}`}>{rev.player_name} {isBaseOwner && '👑'}</span>
+                                            <div className="flex items-center gap-1.5">
+                                              <span className="text-[9px] text-gray-500">{new Date(rev.created_at).toLocaleDateString('fr-FR', {timeZone: 'Europe/Paris', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'})}</span>
+                                              {isMyReview && !isEditing && (
+                                                <>
+                                                  <button onClick={() => startEditingReview(rev)} className="text-gray-500 hover:text-primary transition-colors" title="Modifier">
+                                                    <PencilIcon className="h-3 w-3" />
+                                                  </button>
+                                                  <button onClick={() => handleDeleteReview(rev.id)} className="text-gray-500 hover:text-red-400 transition-colors" title="Supprimer">
+                                                    <TrashIcon className="h-3 w-3" />
+                                                  </button>
+                                                </>
+                                              )}
+                                            </div>
                                           </div>
-                                          <p className="text-gray-200 break-words leading-relaxed">{rev.content}</p>
+                                          {isEditing ? (
+                                            <div className="flex gap-1.5 mt-1">
+                                              <input
+                                                type="text"
+                                                className="flex-1 h-7 rounded-md border border-primary/40 bg-black/40 px-2 text-xs focus:ring-1 focus:ring-primary outline-none"
+                                                value={editingReviewContent}
+                                                onChange={e => setEditingReviewContent(e.target.value)}
+                                                onKeyDown={e => e.key === 'Enter' && handleUpdateReview()}
+                                                autoFocus
+                                              />
+                                              <button onClick={handleUpdateReview} disabled={!editingReviewContent.trim()} className="text-green-400 hover:text-green-300 disabled:opacity-40" title="Valider">
+                                                <CheckIcon className="h-4 w-4" />
+                                              </button>
+                                              <button onClick={cancelEditingReview} className="text-gray-500 hover:text-white" title="Annuler">
+                                                <XIcon className="h-4 w-4" />
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <p className="text-gray-200 break-words leading-relaxed">{rev.content}</p>
+                                          )}
                                         </div>
                                       )
                                     })
@@ -595,7 +904,8 @@ export function LiveMap() {
                             )}
                           </div>
 
-                          {/* Footer Actions (Toujours visibles) */}
+                          {/* Footer Actions (cachées pour les invités) */}
+                          {!currentUser.isGuest && (
                           <div className="p-3 border-t border-white/10 bg-black/20 flex gap-2">
                             <Button variant="ghost" size="sm" className="rounded-lg hover:bg-red-500/20 text-red-400 hover:text-red-300 gap-1.5 flex-1 h-8 text-xs" onClick={() => handleDeleteBase(base.id, base.player_name)}>
                               <TrashIcon className="h-3 w-3" /> Suppr.
@@ -604,6 +914,7 @@ export function LiveMap() {
                               <MoveIcon className="h-3 w-3" /> Déplacer
                             </Button>
                           </div>
+                          )}
                         </Card>
                       </div>
                     )}
@@ -613,10 +924,6 @@ export function LiveMap() {
             </div>
           </div>
         </div>
-
-        {/* ... Les menus latéraux et autres formulaires de bases/boss inchangés par rapport à ta version d'avant ... */}
-        
-        {/* On garde juste les fenêtres contextuelles de création et signalement Boss */}
       </div>
     </>
   )
